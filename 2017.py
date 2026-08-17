@@ -39,6 +39,17 @@ TRADEOFF_ROUNDS = 8
 # True = 打印；False = 不打印。仅增加日志输出，不改变任何算法逻辑。
 DEBUG_RANGE = True
 
+# 分布诊断开关（Kashin + Lloyd-Max 研究第一步：只分析变换后系数的分布）。
+# True 时主程序只运行 analyze_transform_coefficient_distribution()：
+#   - 不实现 Lloyd-Max、不修改量化函数、不改任何聚合算法；
+#   - 不运行完整联邦训练、不绘制准确率 / trade-off 图；
+#   - 跑完自动把本开关恢复为 False 后退出。
+RUN_DISTRIBUTION_TEST = False
+
+# 分布诊断使用相对冗余度选择 Kashin 的 D，故不再与 SRK 的 65536 绑定。
+# 例如 1.10 表示 D≈1.10d；D 可以不是 2 的幂。
+KASHIN_REDUNDANCY_SETTINGS = [1.10, 1.25, 1.50, 2.00]
+
 # ==========================================
 # 1. 定义网络模型：简单的多层感知机 (MLP)
 # ==========================================
@@ -914,8 +925,11 @@ def _fwht_fast(t):
 
 
 class KashinFrame:
-    """随机部分 Hadamard + 随机列符号 冗余紧框架 U (d×D)，满足 U U^T = A I_d，A = D/d。
-    U[i, j] = (1/sqrt(d)) * H[idx_i, j] * column_signs[j]，不构造稠密矩阵。"""
+    """随机部分正交变换 + 随机列符号的冗余紧框架。
+
+    D 为任意正整数：D 为 2 的幂时使用 FWHT；否则使用 FFT 相位构造的
+    实值正交循环变换。两种变换都不构造稠密 d×D 矩阵，并满足 U U^T=A I。
+    """
     def __init__(self, d, D, seed=2026):
         self.d = d
         self.D = D
@@ -926,18 +940,40 @@ class KashinFrame:
         self.indices = torch.randperm(D, generator=gen)[:d]
         # 长度为 D 的随机 ±1 列符号
         self.column_signs = (torch.rand(D, generator=gen) < 0.5).float() * 2.0 - 1.0
+        self.use_fwht = (D & (D - 1)) == 0
+        if not self.use_fwht:
+            # 单位模复相位保证 FFT 变换及其逆变换均保持能量；保存相位即可复现。
+            phase_angle = 2.0 * math.pi * torch.rand(D // 2 + 1, generator=gen)
+            # rfft 的 DC 与 Nyquist 分量必须保持实数，才能得到严格的实值正交变换。
+            phase_angle[0] = 0.0
+            if D % 2 == 0:
+                phase_angle[-1] = 0.0
+            self.fft_phase = torch.polar(torch.ones_like(phase_angle), phase_angle)
+
+    def _forward_transform(self, x):
+        if self.use_fwht:
+            return _fwht_fast(x)
+        spectrum = torch.fft.rfft(x)
+        return torch.fft.irfft(spectrum * self.fft_phase.to(spectrum.device), n=self.D)
+
+    def _transpose_transform(self, x):
+        if self.use_fwht:
+            return _fwht_fast(x)
+        spectrum = torch.fft.rfft(x)
+        phase = self.fft_phase.to(spectrum.device)
+        return torch.fft.irfft(spectrum * phase.conj(), n=self.D)
 
     def frame_analysis(self, x):
         """分析操作：x (R^d) -> 系数 U^T x (R^D)。U^T x = sqrt(A) * cs ⊙ FWHT(v)，v[idx]=x。"""
         v = torch.zeros(self.D)
         v[self.indices] = x
-        had = _fwht_fast(v)
-        return math.sqrt(self.A) * self.column_signs * had
+        transformed = self._transpose_transform(v)
+        return math.sqrt(self.A) * self.column_signs * transformed
 
     def frame_synthesis(self, a):
         """合成操作：系数 a (R^D) -> 向量 U a (R^d)。U a = sqrt(A) * FWHT(cs ⊙ a)[idx]。"""
-        had = _fwht_fast(self.column_signs * a)
-        return math.sqrt(self.A) * had[self.indices]
+        transformed = self._forward_transform(self.column_signs * a)
+        return math.sqrt(self.A) * transformed[self.indices]
 
 
 def kashin_solve(frame, x, iterations=10, clipping_level=None):
@@ -1242,10 +1278,145 @@ def run_focus_kashin_experiment(timestamp):
     plt.show()
 
 # ==========================================
+# 6.7  变换系数分布诊断（Kashin + Lloyd-Max 研究第一步：只分析分布，不实现量化）
+# ==========================================
+def analyze_transform_coefficient_distribution():
+    """分析 SRK 与 Kashin 变换后系数的分布（不量化、不训练、不评估、不出准确率/trade-off 图）。
+
+    流程：
+      1) 创建一个干净的 MNIST_MLP；
+      2) 仅使用第 0 个客户端，local_train_delta(epochs=1) 得到模型更新量 Δw；
+      3) 展平为 delta_flat，记录 d；
+      4) SRK：固定随机种子生成 ±1 符号，固定 D_srk=65536，补零 -> 乘符号 -> _fwht_fast；
+      5) Kashin：按 KASHIN_REDUNDANCY_SETTINGS 选择多个独立 D，
+         每个 D 建 KashinFrame(d, D, seed=2026)，
+         kashin_solve(frame, delta_flat, iterations=10)；
+      6) 对 SRK 与每个 Kashin D 计算均值、标准差、极值、最大绝对值、
+         标准化偏度 (mean(z^3))、标准化四阶矩 (mean(z^4))、归一化峰值 max|coeff|/std；
+      7) 输出每个 Kashin D 的 D/d 与 b=1/2/3 每原始维度通信量；
+      8) 保存一张多子图（标准化系数直方图 vs 标准正态 PDF）图片。
+
+    SRK 仍固定使用 D=65536；Kashin 的 D 独立扫描，且允许不是 2 的幂。
+    """
+    print("\n" + "="*90)
+    print("【分布诊断】SRK / Kashin 变换系数分布分析（第一步：不量化、不训练）")
+    print("="*90)
+
+    torch.manual_seed(2026)
+    np.random.seed(2026)
+
+    # ---------- 1. 干净的模型 + 第 0 个客户端的一次 Δw ----------
+    model = MNIST_MLP()
+    delta = local_train_delta(model, client_loaders[0], epochs=1)
+    delta_flat, _ = flatten_state_dict(delta)
+    d = delta_flat.shape[0]
+    print(f"\n模型更新量 Δw：仅使用客户端 0，local_train_delta(epochs=1)")
+    print(f"d (展平后维度) = {d}")
+
+    # ---------- 2. SRK 系数（D_srk=65536 固定，随机 ±1 符号用固定种子，不量化） ----------
+    D_srk = 65536
+    srk_gen = torch.Generator()
+    srk_gen.manual_seed(12345)  # 固定随机符号种子（与 SRK 聚合实现一致的 ±1 符号）
+    padded = torch.zeros(D_srk)
+    padded[:d] = delta_flat
+    D_sign = (torch.rand(D_srk, generator=srk_gen) < 0.5).float() * 2.0 - 1.0
+    srk_coeffs = _fwht_fast(padded * D_sign)
+
+    # ---------- 3. Kashin 系数（每个 D 各建一个框架，seed 固定） ----------
+    kashin_D_settings = [max(d, int(round(d * ratio)))
+                         for ratio in KASHIN_REDUNDANCY_SETTINGS]
+    kashin_coeffs = {}
+    for D in kashin_D_settings:
+        frame = KashinFrame(d, D=D, seed=2026)
+        a = kashin_solve(frame, delta_flat, iterations=10)
+        kashin_coeffs[D] = a
+        print(f"Kashin D={D}: 系数长度 = {a.shape[0]}")
+
+    # ---------- 4. 统计指标 ----------
+    methods = [("SRK", D_srk, srk_coeffs)] + [("Kashin", D, kashin_coeffs[D]) for D in kashin_D_settings]
+
+    print("\n" + "="*90)
+    print("系数分布统计（z=(x-mean)/(std+1e-12)；skew=mean(z^3)；kurt4=mean(z^4)；norm_peak=max|coeff|/std）")
+    print("参考：正态分布 skew≈0，四阶矩 kurt4≈3；norm_peak 越小越好（Kashin 的目标）")
+    print("="*90)
+    header = (f"  {'method':10s} {'D':>8s} {'mean':>12s} {'std':>12s} {'min':>12s} "
+              f"{'max':>12s} {'max_abs':>12s} {'skew':>9s} {'kurt4':>9s} {'norm_peak':>11s}")
+    print(header)
+    print("-" * len(header))
+
+    stats = {}
+    for name, D, coeff in methods:
+        c = coeff.float()
+        mean = c.mean().item()
+        std = c.std().item()
+        cmin = c.min().item()
+        cmax = c.max().item()
+        max_abs = c.abs().max().item()
+        z = (c - mean) / (std + 1e-12)
+        skew = z.pow(3).mean().item()
+        kurt4 = z.pow(4).mean().item()
+        norm_peak = max_abs / (std + 1e-12)
+        stats[(name, D)] = dict(mean=mean, std=std, min=cmin, max=cmax, max_abs=max_abs,
+                                skew=skew, kurt4=kurt4, norm_peak=norm_peak, z=z)
+        print(f"  {name:10s} {D:8d} {mean:12.6e} {std:12.6e} {cmin:12.6e} {cmax:12.6e} "
+              f"{max_abs:12.6e} {skew:9.3f} {kurt4:9.3f} {norm_peak:11.3f}")
+
+    # ---------- 5. 通信量（每个 Kashin D） ----------
+    print("\n" + "="*90)
+    print("通信量随 D 的变化（每原始维度 bit = (D*bits_per_coeff + 64) / d）")
+    print("="*90)
+    print(f"  {'D':>8s} {'D/d':>8s} {'b=1':>10s} {'b=2':>10s} {'b=3':>10s}")
+    print("-" * 50)
+    for D in kashin_D_settings:
+        b1 = (D * 1 + 64) / d
+        b2 = (D * 2 + 64) / d
+        b3 = (D * 3 + 64) / d
+        print(f"  {D:8d} {D/d:8.3f} {b1:10.3f} {b2:10.3f} {b3:10.3f}")
+
+    # ---------- 6. 图片：三个子图的标准化系数直方图 vs 标准正态 PDF ----------
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fig, axes = plt.subplots(1, len(methods), figsize=(6 * len(methods), 5))
+    axes = np.atleast_1d(axes)
+    for ax, (name, D, coeff) in zip(axes, methods):
+        z = stats[(name, D)]["z"].numpy()
+        lo = min(-5.0, float(z.min()))
+        hi = max(5.0, float(z.max()))
+        xgrid = np.linspace(lo, hi, 500)
+        pdf = np.exp(-0.5 * xgrid ** 2) / math.sqrt(2 * math.pi)
+        color = '#9467bd' if name == 'Kashin' else '#ff7f0e'
+        ax.hist(z, bins=80, density=True, alpha=0.6, color=color,
+                edgecolor='black', linewidth=0.4, label='standardized coeff')
+        ax.plot(xgrid, pdf, 'r-', linewidth=1.8, label='N(0,1)')
+        ax.set_xlabel("Standardized Coefficient")
+        ax.set_ylabel("Density")
+        ax.set_title(f"{name}, D={D}", fontsize=12)
+        ax.legend(fontsize=9)
+        ax.grid(True, linestyle='--', alpha=0.4)
+    fig.suptitle("Transform Coefficient Distribution (standardized) vs Standard Normal", fontsize=14)
+    fig.tight_layout()
+    dist_filename = f"transform_distribution_vs_D_{ts}.png"
+    fig.savefig(dist_filename, dpi=300)
+    plt.close(fig)
+    print(f"\n分布图已保存: '{dist_filename}'")
+
+    # ---------- 7. 结论提示 ----------
+    print("\n" + "="*90)
+    print("SRK 固定 D=65536；Kashin 独立扫描 D，不要求 D 为 2 的幂。")
+    print("Kashin D 列表：" + ", ".join(str(D) for D in kashin_D_settings))
+    print("="*90)
+
+# ==========================================
 # 7. 主程序运行与对比实验
 # ==========================================
 if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # ---------- 分布诊断开关：True 时只运行变换系数分布分析，不验证、不训练、不出旧图 ----------
+    if RUN_DISTRIBUTION_TEST:
+        analyze_transform_coefficient_distribution()
+        RUN_DISTRIBUTION_TEST = False  # 一次性诊断，跑完恢复默认 False
+        print("\n分布诊断完成，程序正常退出。")
+        sys.exit(0)
 
     # 验证阶段先关闭量化前调试打印，保持验证输出清晰（正式实验前再恢复）
     DEBUG_RANGE = False
