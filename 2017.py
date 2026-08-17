@@ -931,6 +931,49 @@ def federated_round_kashin_update(global_model, client_deltas, k_levels, frame, 
     bits_per_dim = (frame.D * int(np.ceil(np.log2(k_levels))) + 64.0) / d_size
     return bits_per_dim
 
+
+def federated_round_kashin_lloyd_update(global_model, client_deltas, k_levels,
+                                        frame, iterations=10, lloyd_iterations=20):
+    """Kashin + Lloyd-Max 的 Δw 聚合版本。
+
+    与 federated_round_kashin_update 完全相同，只替换系数量化器。每个客户端
+    在自己的 Kashin 系数上训练 Lloyd-Max 码本，再上传量化系数和码本。
+    因此通信量计入 k 个 float32 量化中心：
+        (D*ceil(log2(k)) + 32*k) / d
+    这里不再额外发送 min/max；区间边界可由相邻中心计算。
+    """
+    aggregated_a = None
+    flat, shapes = flatten_state_dict(client_deltas[0])
+    d_size = flat.shape[0]
+
+    for delta_dict in client_deltas:
+        flat_i, _ = flatten_state_dict(delta_dict)
+        a = kashin_solve(frame, flat_i, iterations)
+        if DEBUG_RANGE:
+            _accumulate_range("Kashin Lloyd coefficient", a)
+        quantized_a, _, _ = lloyd_max_quantize(a, k_levels, iterations=lloyd_iterations)
+        aggregated_a = quantized_a if aggregated_a is None else aggregated_a + quantized_a
+
+    aggregated_a /= len(client_deltas)
+    average_delta_flat = frame.frame_synthesis(aggregated_a)
+    average_delta_state = unflatten_state_dict(average_delta_flat, shapes)
+    updated_state = state_dict_add(global_model.state_dict(), average_delta_state)
+    global_model.load_state_dict(updated_state)
+
+    return (frame.D * int(np.ceil(np.log2(k_levels))) + 32.0 * k_levels) / d_size
+
+
+def verify_kashin_lloyd_update_pipeline():
+    """用两个客户端做轻量验证，不运行完整实验。"""
+    model = MNIST_MLP()
+    frame = KashinFrame(sum(p.numel() for p in model.parameters()), D=65536, seed=2026)
+    deltas = [local_train_delta(model, client_loaders[i], epochs=1) for i in range(2)]
+    test_model = copy.deepcopy(model)
+    bits = federated_round_kashin_lloyd_update(test_model, deltas, 4, frame, iterations=2)
+    finite = all(torch.isfinite(value).all().item() for value in test_model.state_dict().values())
+    print(f"Kashin + Lloyd-Max 更新管线：模型参数有限值={finite}，通信量={bits:.6f} Bits/原始维度")
+    return finite and math.isfinite(bits)
+
 # ==========================================
 # 6.5  Kashin 变换独立单元测试（不接入联邦训练）
 # -------------------------------------------------
