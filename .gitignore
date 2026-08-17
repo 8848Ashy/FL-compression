@@ -12,6 +12,7 @@ data/
 *.jpeg
 *.npz
 *.npy
+*.csv
 
 # Runtime logs and temporary outputs
 *.log
