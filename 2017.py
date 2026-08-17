@@ -949,6 +949,32 @@ def federated_round_kashin_update(global_model, client_deltas, k_levels, frame, 
     return bits_per_dim
 
 
+def federated_round_srk_lloyd_update(global_model, client_deltas, k_levels,
+                                     centers, rotation_seed=None):
+    """SRK + 共享归一化 Lloyd-Max：每客户端额外发送一个 scale。"""
+    flat0, shapes = flatten_state_dict(client_deltas[0])
+    d_orig = flat0.shape[0]
+    d_pow2 = int(2 ** np.ceil(np.log2(d_orig)))
+    gen = torch.Generator()
+    gen.manual_seed(0 if rotation_seed is None else rotation_seed)
+    signs = (torch.rand(d_pow2, generator=gen) < 0.5).float() * 2.0 - 1.0
+    aggregated = None
+    for delta in client_deltas:
+        flat, _ = flatten_state_dict(delta)
+        padded = torch.zeros(d_pow2)
+        padded[:d_orig] = flat
+        coeff = _fwht_fast(padded * signs)
+        scale = coeff.abs().max().clamp_min(1e-12)
+        quantized, _ = quantize_with_codebook(coeff / scale, centers)
+        restored = quantized * scale
+        aggregated = restored if aggregated is None else aggregated + restored
+    aggregated /= len(client_deltas)
+    delta_bar = (_fwht_fast(aggregated) * signs)[:d_orig]
+    global_model.load_state_dict(state_dict_add(
+        global_model.state_dict(), unflatten_state_dict(delta_bar, shapes)))
+    return (d_pow2 * int(np.ceil(np.log2(k_levels))) + 32.0) / d_orig
+
+
 def federated_round_kashin_lloyd_update(global_model, client_deltas, k_levels,
                                         frame, iterations=10, lloyd_iterations=20,
                                         shared_centers=None, include_codebook_bits=False):
@@ -971,7 +997,9 @@ def federated_round_kashin_lloyd_update(global_model, client_deltas, k_levels,
         if shared_centers is None:
             quantized_a, _, _ = lloyd_max_quantize(a, k_levels, iterations=lloyd_iterations)
         else:
-            quantized_a, _ = quantize_with_codebook(a, shared_centers)
+            scale = a.abs().max().clamp_min(1e-12)
+            quantized_a, _ = quantize_with_codebook(a / scale, shared_centers)
+            quantized_a = quantized_a * scale
         aggregated_a = quantized_a if aggregated_a is None else aggregated_a + quantized_a
 
     aggregated_a /= len(client_deltas)
@@ -980,7 +1008,9 @@ def federated_round_kashin_lloyd_update(global_model, client_deltas, k_levels,
     updated_state = state_dict_add(global_model.state_dict(), average_delta_state)
     global_model.load_state_dict(updated_state)
 
-    codebook_bits = 32.0 * k_levels if include_codebook_bits else 0.0
+    codebook_bits = 32.0 if shared_centers is not None else 32.0 * k_levels
+    if not include_codebook_bits:
+        codebook_bits = 32.0 if shared_centers is not None else 0.0
     return (frame.D * int(np.ceil(np.log2(k_levels))) + codebook_bits) / d_size
 
 
@@ -1182,7 +1212,24 @@ def build_shared_kashin_codebook(base_model, frame, k_levels):
         delta = local_train_delta(base_model, client_loaders[client_id], epochs=1)
         flat, _ = flatten_state_dict(delta)
         calibration.append(kashin_solve(frame, flat, iterations=5))
-    return lloyd_max_codebook(torch.cat(calibration), k_levels, iterations=20)
+    centers = lloyd_max_codebook(torch.cat(calibration), k_levels, iterations=20)
+    return centers / centers.abs().max().clamp_min(1e-12)
+
+
+def build_shared_srk_codebook(base_model, k_levels, d):
+    """用校准更新拟合 SRK 的共享归一化 Lloyd-Max 码本。"""
+    d_pow2 = int(2 ** np.ceil(np.log2(d)))
+    gen = torch.Generator(); gen.manual_seed(2026)
+    signs = (torch.rand(d_pow2, generator=gen) < 0.5).float() * 2.0 - 1.0
+    values = []
+    for loader in client_loaders:
+        delta = local_train_delta(base_model, loader, epochs=1)
+        flat, _ = flatten_state_dict(delta)
+        padded = torch.zeros(d_pow2); padded[:d] = flat
+        coeff = _fwht_fast(padded * signs)
+        values.append(coeff / coeff.abs().max().clamp_min(1e-12))
+    centers = lloyd_max_codebook(torch.cat(values), k_levels, iterations=20)
+    return centers / centers.abs().max().clamp_min(1e-12)
 
 
 def run_focus_kashin_experiment(timestamp):
@@ -1197,7 +1244,7 @@ def run_focus_kashin_experiment(timestamp):
     _RANGE_ACC.clear()
 
     print("\n" + "="*80)
-    print("【聚焦实验】Original / SRK / Kashin / Kashin+Lloyd-Max 四算法 Δw 压缩对比")
+    print("【聚焦实验】Original / SRK+Uniform / SRK+Lloyd / Kashin+Uniform / Kashin+Lloyd")
     print("="*80)
 
     # ---------- 共享 Kashin 框架（全实验复用同一个，seed 固定，绝不按轮/按客户端重建） ----------
@@ -1214,6 +1261,7 @@ def run_focus_kashin_experiment(timestamp):
     # 从同一个 initial_model 克隆三个模型
     model_original = copy.deepcopy(initial_model)
     model_srk = copy.deepcopy(initial_model)
+    model_srk_lloyd = copy.deepcopy(initial_model)
     model_kashin = copy.deepcopy(initial_model)
     model_kashin_lloyd = copy.deepcopy(initial_model)
 
@@ -1221,14 +1269,17 @@ def run_focus_kashin_experiment(timestamp):
     k_levels = FIXED_K_LEVELS
     print("正在用所有客户端的校准更新拟合共享 Lloyd-Max 码本...")
     shared_lloyd_centers = build_shared_kashin_codebook(initial_model, kashin_frame, k_levels)
+    shared_srk_lloyd_centers = build_shared_srk_codebook(initial_model, k_levels, model_dim_d)
     print(f"共享 Lloyd-Max 码本中心数: {len(shared_lloyd_centers)}")
 
     history_original = []
     history_srk = []
+    history_srk_lloyd = []
     history_kashin = []
     history_kashin_lloyd = []
     bits_original_list = []
     bits_srk_list = []
+    bits_srk_lloyd_list = []
     bits_kashin_list = []
     bits_kashin_lloyd_list = []
 
@@ -1236,6 +1287,7 @@ def run_focus_kashin_experiment(timestamp):
         print(f"\n==================== 第 {r+1} 轮联邦实验 ====================")
         local_deltas_original = []
         local_deltas_srk = []
+        local_deltas_srk_lloyd = []
         local_deltas_kashin = []
         local_deltas_kashin_lloyd = []
 
@@ -1243,10 +1295,12 @@ def run_focus_kashin_experiment(timestamp):
             loader = client_loaders[client_id]
             delta_original = local_train_delta(model_original, loader, epochs=2)
             delta_srk = local_train_delta(model_srk, loader, epochs=2)
+            delta_srk_lloyd = local_train_delta(model_srk_lloyd, loader, epochs=2)
             delta_kashin = local_train_delta(model_kashin, loader, epochs=2)
             delta_kashin_lloyd = local_train_delta(model_kashin_lloyd, loader, epochs=2)
             local_deltas_original.append(delta_original)
             local_deltas_srk.append(delta_srk)
+            local_deltas_srk_lloyd.append(delta_srk_lloyd)
             local_deltas_kashin.append(delta_kashin)
             local_deltas_kashin_lloyd.append(delta_kashin_lloyd)
 
@@ -1261,6 +1315,13 @@ def run_focus_kashin_experiment(timestamp):
         acc_srk = evaluate_model(model_srk, test_loader)
         history_srk.append(acc_srk)
         bits_srk_list.append(b_srk)
+
+        b_srk_lloyd = federated_round_srk_lloyd_update(
+            model_srk_lloyd, local_deltas_srk_lloyd, k_levels,
+            shared_srk_lloyd_centers, rotation_seed=10000 + r)
+        acc_srk_lloyd = evaluate_model(model_srk_lloyd, test_loader)
+        history_srk_lloyd.append(acc_srk_lloyd)
+        bits_srk_lloyd_list.append(b_srk_lloyd)
 
         # Kashin：共享 KashinFrame + 迭代截断求均匀系数，全轮复用同一 frame
         b_kashin = federated_round_kashin_update(model_kashin, local_deltas_kashin, k_levels, kashin_frame, iterations=10)
@@ -1277,17 +1338,18 @@ def run_focus_kashin_experiment(timestamp):
 
         print(f" -> Original (Δw, No Compression)      准确率: {acc_original*100:.2f}% | 单维通信开销: {b_original:.2f} Bits")
         print(f" -> SRK (Δw + Hadamard Rotation)       准确率: {acc_srk*100:.2f}% | 单维通信开销: {b_srk:.2f} Bits")
+        print(f" -> SRK + Lloyd-Max                    准确率: {acc_srk_lloyd*100:.2f}% | 单维通信开销: {b_srk_lloyd:.2f} Bits")
         print(f" -> Kashin (Δw + Kashin Transform)     准确率: {acc_kashin*100:.2f}% | 单维通信开销: {b_kashin:.2f} Bits")
         print(f" -> Kashin + Lloyd-Max                 准确率: {acc_kashin_lloyd*100:.2f}% | 单维通信开销: {b_kashin_lloyd:.2f} Bits")
 
     # ---- 四算法汇总表 ----
     print("\n" + "="*120)
-    print(f"          聚焦四算法汇总表 (Fixed b={FIXED_BITS}, k={FIXED_K_LEVELS}, {num_rounds} 轮)")
+    print(f"          聚焦五算法汇总表 (Fixed b={FIXED_BITS}, k={FIXED_K_LEVELS}, {num_rounds} 轮)")
     print("="*120)
-    print("  Round | Original | SRK | Kashin | Kashin+Lloyd | Original Bits | SRK Bits | Kashin Bits | Lloyd Bits")
+    print("  Round | Original | SRK-U | SRK-LM | Kashin-U | Kashin-LM | Bits")
     print("-"*120)
     for r in range(num_rounds):
-        print(f" Round {r+1} | {history_original[r]*100:7.2f}% | {history_srk[r]*100:7.2f}% | {history_kashin[r]*100:7.2f}% | {history_kashin_lloyd[r]*100:11.2f}% | {bits_original_list[r]:8.2f} | {bits_srk_list[r]:8.3f} | {bits_kashin_list[r]:8.3f} | {bits_kashin_lloyd_list[r]:9.3f}")
+        print(f" Round {r+1} | {history_original[r]*100:7.2f}% | {history_srk[r]*100:6.2f}% | {history_srk_lloyd[r]*100:7.2f}% | {history_kashin[r]*100:8.2f}% | {history_kashin_lloyd[r]*100:9.2f}%")
     print("="*120)
 
     srk_cost = bits_srk_list[-1]  # 与 Kashin 通信量相同（D = d_pow2）
@@ -1297,6 +1359,7 @@ def run_focus_kashin_experiment(timestamp):
     rounds = np.arange(1, num_rounds + 1)
     ax1.plot(rounds, [a*100 for a in history_original], marker='D', linestyle='-', linewidth=2, color='#8c564b', label='Original (Δw, No Compression)')
     ax1.plot(rounds, [a*100 for a in history_srk], marker='^', linestyle='--', linewidth=2, color='#ff7f0e', label='SRK (Δw + Hadamard Rotation)')
+    ax1.plot(rounds, [a*100 for a in history_srk_lloyd], marker='v', linestyle=':', linewidth=2, color='#e377c2', label='SRK + Lloyd-Max')
     ax1.plot(rounds, [a*100 for a in history_kashin], marker='P', linestyle='-', linewidth=2, color='#9467bd', label='Kashin (Δw + Kashin Transform)')
     ax1.plot(rounds, [a*100 for a in history_kashin_lloyd], marker='s', linestyle=':', linewidth=2, color='#2ca02c', label='Kashin + Lloyd-Max')
     ax1.set_title("MNIST Accuracy with Model-Update Compression", fontsize=13, fontweight='bold')
@@ -1308,6 +1371,7 @@ def run_focus_kashin_experiment(timestamp):
 
     # y 轴自动设置为 min(curves)-1 ~ max(curves)+1，确保能看清差异
     all_acc = [a*100 for a in history_original] + [a*100 for a in history_srk] + [a*100 for a in history_kashin] + [a*100 for a in history_kashin_lloyd]
+    all_acc += [a*100 for a in history_srk_lloyd]
     ax1.set_ylim(min(all_acc) - 1.0, max(all_acc) + 1.0)
 
     # 图内文本框
@@ -1328,9 +1392,11 @@ def run_focus_kashin_experiment(timestamp):
     print("-"*120)
 
     cum_srk_list = []
+    cum_srk_lloyd_list = []
     cum_kashin_list = []
     cum_kashin_lloyd_list = []
     err_srk_list = []
+    err_srk_lloyd_list = []
     err_kashin_list = []
     err_kashin_lloyd_list = []
     orig_errs = []
@@ -1341,14 +1407,17 @@ def run_focus_kashin_experiment(timestamp):
         base_model = MNIST_MLP()
         model_original = copy.deepcopy(base_model)
         model_srk = copy.deepcopy(base_model)
+        model_srk_lloyd = copy.deepcopy(base_model)
         model_kashin = copy.deepcopy(base_model)
         model_kashin_lloyd = copy.deepcopy(base_model)
         print(f"  b={b}: 拟合共享 Lloyd-Max 码本...")
         shared_lloyd_centers = build_shared_kashin_codebook(base_model, kashin_frame, k_levels)
+        shared_srk_lloyd_centers = build_shared_srk_codebook(base_model, k_levels, model_dim_d)
 
         res = {}
         for method, model in (('original', model_original), ('srk', model_srk),
-                              ('kashin', model_kashin), ('kashin_lloyd', model_kashin_lloyd)):
+                              ('srk_lloyd', model_srk_lloyd), ('kashin', model_kashin),
+                              ('kashin_lloyd', model_kashin_lloyd)):
             bits_r = None
             for r in range(TRADEOFF_ROUNDS):
                 deltas_r = [local_train_delta(model, client_loaders[c], epochs=2) for c in range(num_clients)]
@@ -1357,6 +1426,10 @@ def run_focus_kashin_experiment(timestamp):
                 elif method == 'srk':
                     # SRK 每轮旋转种子稳定、可复现且每个 b / 每轮都不同
                     bits_r = federated_round_srk_update(model, deltas_r, k_levels, rotation_seed=20000 + 100*b + r)
+                elif method == 'srk_lloyd':
+                    bits_r = federated_round_srk_lloyd_update(
+                        model, deltas_r, k_levels, shared_srk_lloyd_centers,
+                        rotation_seed=20000 + 100*b + r)
                 else:
                     if method == 'kashin':
                         bits_r = federated_round_kashin_update(model, deltas_r, k_levels, kashin_frame, iterations=10)
@@ -1370,7 +1443,7 @@ def run_focus_kashin_experiment(timestamp):
                 bits_r += (32.0 * k_levels) / (model_dim_d * TRADEOFF_ROUNDS)
             res[method] = dict(acc=acc, err=1.0 - acc, bits=bits_r)
 
-        for method in ('original', 'srk', 'kashin', 'kashin_lloyd'):
+        for method in ('original', 'srk', 'srk_lloyd', 'kashin', 'kashin_lloyd'):
             cum = res[method]['bits'] * TRADEOFF_ROUNDS
             print(f"   {b:2d}  |  {k_levels:2d} | {method:15s} | {res[method]['acc']*100:12.2f}%  | {res[method]['err']*100:13.2f}%  | {res[method]['bits']:20.4f} | {cum:20.2f}")
         diff = abs(res['srk']['bits'] - res['kashin']['bits'])
@@ -1380,9 +1453,11 @@ def run_focus_kashin_experiment(timestamp):
 
         orig_errs.append(res['original']['err'])
         cum_srk_list.append(res['srk']['bits'] * TRADEOFF_ROUNDS)
+        cum_srk_lloyd_list.append(res['srk_lloyd']['bits'] * TRADEOFF_ROUNDS)
         cum_kashin_list.append(res['kashin']['bits'] * TRADEOFF_ROUNDS)
         cum_kashin_lloyd_list.append(res['kashin_lloyd']['bits'] * TRADEOFF_ROUNDS)
         err_srk_list.append(res['srk']['err'])
+        err_srk_lloyd_list.append(res['srk_lloyd']['err'])
         err_kashin_list.append(res['kashin']['err'])
         err_kashin_lloyd_list.append(res['kashin_lloyd']['err'])
 
@@ -1397,6 +1472,7 @@ def run_focus_kashin_experiment(timestamp):
                  xytext=(-125, 10), textcoords='offset points', fontsize=9, color='#8c564b')
 
     ax2.plot(cum_srk_list, err_srk_list, marker='^', linestyle='--', linewidth=2, color='#ff7f0e', label='SRK (Δw + Hadamard Rotation)')
+    ax2.plot(cum_srk_lloyd_list, err_srk_lloyd_list, marker='v', linestyle=':', linewidth=2, color='#e377c2', label='SRK + Lloyd-Max')
     ax2.plot(cum_kashin_list, err_kashin_list, marker='P', linestyle='-', linewidth=2, color='#9467bd', label='Kashin (Δw + Kashin Transform)')
     ax2.plot(cum_kashin_lloyd_list, err_kashin_lloyd_list, marker='s', linestyle=':', linewidth=2, color='#2ca02c', label='Kashin + Lloyd-Max')
 
