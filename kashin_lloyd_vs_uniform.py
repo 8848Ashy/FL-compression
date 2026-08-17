@@ -67,6 +67,32 @@ def federated_round_scaled_lloyd(global_model, client_deltas, frame, centers):
     return bits
 
 
+def fixed_middle_dense_codebook(k_levels):
+    """固定的中间密、两端稀码本，基于标准正态分布分位点构造。"""
+    normal = torch.distributions.Normal(0.0, 1.0)
+    probabilities = (torch.arange(k_levels, dtype=torch.float32) + 0.5) / k_levels
+    centers = normal.icdf(probabilities)
+    centers = centers / centers.abs().max()
+    return centers
+
+
+def federated_round_fixed_nonuniform(global_model, client_deltas, frame, centers):
+    """固定非均匀码本 + 每客户端尺度因子的 Kashin 聚合。"""
+    aggregated = None
+    flat0, shapes = fl.flatten_state_dict(client_deltas[0])
+    for delta in client_deltas:
+        flat, _ = fl.flatten_state_dict(delta)
+        coeff = fl.kashin_solve(frame, flat, iterations=KASHIN_ITERATIONS)
+        scale = coeff.abs().max().clamp_min(1e-12)
+        quantized, _ = fl.quantize_with_codebook(coeff / scale, centers)
+        restored = quantized * scale
+        aggregated = restored if aggregated is None else aggregated + restored
+    aggregated /= len(client_deltas)
+    average_delta = fl.unflatten_state_dict(frame.frame_synthesis(aggregated), shapes)
+    global_model.load_state_dict(fl.state_dict_add(global_model.state_dict(), average_delta))
+    return (frame.D * int(np.ceil(np.log2(K_LEVELS))) + 32.0) / flat0.shape[0]
+
+
 def run_experiment():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     print("=" * 90)
@@ -78,12 +104,16 @@ def run_experiment():
     initial_model = fl.MNIST_MLP()
     model_uniform = copy.deepcopy(initial_model)
     model_lloyd = copy.deepcopy(initial_model)
+    model_fixed = copy.deepcopy(initial_model)
     d = sum(parameter.numel() for parameter in initial_model.parameters())
     frame = fl.KashinFrame(d, D=KASHIN_D, seed=KASHIN_SEED)
     shared_centers = fit_shared_codebook(copy.deepcopy(initial_model), frame)
+    fixed_centers = fixed_middle_dense_codebook(K_LEVELS)
+    print(f"固定中间密集码本: {fixed_centers.tolist()}")
 
     history_uniform = []
     history_lloyd = []
+    history_fixed = []
     uniform_bits = None
     lloyd_bits = None
     diagnostics = []
@@ -92,6 +122,7 @@ def run_experiment():
         print(f"\n========== Federated Round {round_id + 1}/{NUM_ROUNDS} ==========")
         deltas_uniform = []
         deltas_lloyd = []
+        deltas_fixed = []
 
         # 两种方法使用完全相同的 DataLoader shuffle 随机状态。
         rng_state = torch.get_rng_state()
@@ -101,6 +132,9 @@ def run_experiment():
         torch.set_rng_state(rng_state)
         for client_id, loader in enumerate(fl.client_loaders):
             deltas_lloyd.append(fl.local_train_delta(model_lloyd, loader, epochs=LOCAL_EPOCHS))
+        torch.set_rng_state(rng_state)
+        for client_id, loader in enumerate(fl.client_loaders):
+            deltas_fixed.append(fl.local_train_delta(model_fixed, loader, epochs=LOCAL_EPOCHS))
 
         # 在聚合前诊断两种量化器，不改变聚合流程。
         mse_uniform = []
@@ -150,13 +184,18 @@ def run_experiment():
             model_uniform, deltas_uniform, K_LEVELS, frame, iterations=KASHIN_ITERATIONS)
         lloyd_bits = federated_round_scaled_lloyd(
             model_lloyd, deltas_lloyd, frame, shared_centers)
+        fixed_bits = federated_round_fixed_nonuniform(
+            model_fixed, deltas_fixed, frame, fixed_centers)
 
         acc_uniform = fl.evaluate_model(model_uniform, fl.test_loader)
         acc_lloyd = fl.evaluate_model(model_lloyd, fl.test_loader)
+        acc_fixed = fl.evaluate_model(model_fixed, fl.test_loader)
         history_uniform.append(acc_uniform)
         history_lloyd.append(acc_lloyd)
+        history_fixed.append(acc_fixed)
         print(f"Uniform Kashin : {acc_uniform * 100:.2f}% | {uniform_bits:.6f} bits/dim/round")
         print(f"Shared Lloyd  : {acc_lloyd * 100:.2f}% | {lloyd_bits:.6f} bits/dim/round")
+        print(f"Fixed nonuniform: {acc_fixed * 100:.2f}% | {fixed_bits:.6f} bits/dim/round")
 
     codebook_bits = 32 * K_LEVELS
     amortized_lloyd_bits = lloyd_bits + codebook_bits / (d * NUM_ROUNDS)
@@ -164,6 +203,7 @@ def run_experiment():
     print("最终结果")
     print(f"Uniform Kashin final accuracy : {history_uniform[-1] * 100:.2f}%")
     print(f"Shared Lloyd final accuracy   : {history_lloyd[-1] * 100:.2f}%")
+    print(f"Fixed nonuniform final accuracy: {history_fixed[-1] * 100:.2f}%")
     print(f"Uniform cumulative bits       : {uniform_bits * NUM_ROUNDS:.6f}")
     print(f"Lloyd cumulative bits         : {lloyd_bits * NUM_ROUNDS:.6f}")
     print(f"Lloyd codebook overhead       : {codebook_bits} bits/client (one-time)")
@@ -190,14 +230,16 @@ def run_experiment():
             color="#9467bd", label="Kashin + Uniform Quantization")
     ax.plot(rounds, np.array(history_lloyd) * 100, "s-", linewidth=2,
             color="#2ca02c", label="Kashin + Shared Lloyd-Max")
+    ax.plot(rounds, np.array(history_fixed) * 100, "^-.", linewidth=2,
+            color="#ff7f0e", label="Kashin + Fixed Middle-Dense")
     ax.set_xlabel("Federated Round")
     ax.set_ylabel("Test Accuracy (%)")
     ax.set_title("Kashin Quantizer Comparison on MNIST")
     ax.set_xticks(rounds)
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend()
-    ax.set_ylim(min(np.r_[history_uniform, history_lloyd]) * 100 - 1,
-                max(np.r_[history_uniform, history_lloyd]) * 100 + 1)
+    ax.set_ylim(min(np.r_[history_uniform, history_lloyd, history_fixed]) * 100 - 1,
+                max(np.r_[history_uniform, history_lloyd, history_fixed]) * 100 + 1)
     fig.tight_layout()
     filename = f"kashin_uniform_vs_lloyd_{timestamp}.png"
     fig.savefig(filename, dpi=300)
