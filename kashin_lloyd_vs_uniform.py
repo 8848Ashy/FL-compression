@@ -65,16 +65,62 @@ def run_experiment():
     history_lloyd = []
     uniform_bits = None
     lloyd_bits = None
+    diagnostics = []
 
     for round_id in range(NUM_ROUNDS):
         print(f"\n========== Federated Round {round_id + 1}/{NUM_ROUNDS} ==========")
         deltas_uniform = []
         deltas_lloyd = []
 
+        # 两种方法使用完全相同的 DataLoader shuffle 随机状态。
+        rng_state = torch.get_rng_state()
         for client_id, loader in enumerate(fl.client_loaders):
             # 两种方法使用相同客户端数据；分别从各自当前全局模型本地训练
             deltas_uniform.append(fl.local_train_delta(model_uniform, loader, epochs=LOCAL_EPOCHS))
+        torch.set_rng_state(rng_state)
+        for client_id, loader in enumerate(fl.client_loaders):
             deltas_lloyd.append(fl.local_train_delta(model_lloyd, loader, epochs=LOCAL_EPOCHS))
+
+        # 在聚合前诊断两种量化器，不改变聚合流程。
+        mse_uniform = []
+        mse_lloyd = []
+        bias_uniform = []
+        bias_lloyd = []
+        cosine_uniform = []
+        cosine_lloyd = []
+        out_of_range = []
+        boundaries = (shared_centers[:-1] + shared_centers[1:]) / 2.0
+        for delta_u, delta_l in zip(deltas_uniform, deltas_lloyd):
+            flat_u, _ = fl.flatten_state_dict(delta_u)
+            flat_l, _ = fl.flatten_state_dict(delta_l)
+            coeff_u = fl.kashin_solve(frame, flat_u, iterations=KASHIN_ITERATIONS)
+            coeff_l = fl.kashin_solve(frame, flat_l, iterations=KASHIN_ITERATIONS)
+
+            torch.set_rng_state(rng_state)
+            quant_u, _ = fl.stochastic_k_level_quantize(coeff_u, K_LEVELS)
+            quant_l, _ = fl.quantize_with_codebook(coeff_l, shared_centers)
+            mse_uniform.append(torch.mean((coeff_u - quant_u) ** 2).item())
+            mse_lloyd.append(torch.mean((coeff_l - quant_l) ** 2).item())
+            bias_uniform.append(torch.norm(quant_u - coeff_u).item() / (torch.norm(coeff_u).item() + 1e-12))
+            bias_lloyd.append(torch.norm(quant_l - coeff_l).item() / (torch.norm(coeff_l).item() + 1e-12))
+            cosine_uniform.append(torch.nn.functional.cosine_similarity(coeff_u, quant_u, dim=0).item())
+            cosine_lloyd.append(torch.nn.functional.cosine_similarity(coeff_l, quant_l, dim=0).item())
+            out_of_range.append(((coeff_l < boundaries[0]) | (coeff_l > boundaries[-1])).float().mean().item())
+
+        diagnostics.append({
+            "round": round_id + 1,
+            "uniform_mse": float(np.mean(mse_uniform)),
+            "lloyd_mse": float(np.mean(mse_lloyd)),
+            "uniform_rel_error": float(np.mean(bias_uniform)),
+            "lloyd_rel_error": float(np.mean(bias_lloyd)),
+            "uniform_cosine": float(np.mean(cosine_uniform)),
+            "lloyd_cosine": float(np.mean(cosine_lloyd)),
+            "lloyd_out_of_range": float(np.mean(out_of_range)),
+        })
+        item = diagnostics[-1]
+        print(f"诊断：MSE U/L={item['uniform_mse']:.3e}/{item['lloyd_mse']:.3e}, "
+              f"cos U/L={item['uniform_cosine']:.6f}/{item['lloyd_cosine']:.6f}, "
+              f"Lloyd超范围={item['lloyd_out_of_range'] * 100:.2f}%")
 
         uniform_bits = fl.federated_round_kashin_update(
             model_uniform, deltas_uniform, K_LEVELS, frame, iterations=KASHIN_ITERATIONS)
@@ -102,6 +148,20 @@ def run_experiment():
     print(f"Lloyd codebook overhead       : {codebook_bits} bits/client (one-time)")
     print(f"Lloyd amortized cumulative    : {amortized_lloyd_bits * NUM_ROUNDS:.6f}")
     print("=" * 90)
+
+    print("\n每轮量化诊断：")
+    print("round | uniform MSE | Lloyd MSE | uniform cosine | Lloyd cosine | Lloyd out-of-range")
+    for item in diagnostics:
+        print(f"{item['round']:5d} | {item['uniform_mse']:.3e} | {item['lloyd_mse']:.3e} | "
+              f"{item['uniform_cosine']:.6f} | {item['lloyd_cosine']:.6f} | "
+              f"{item['lloyd_out_of_range'] * 100:.2f}%")
+
+    diagnostic_array = np.array([[item[key] for key in (
+        "uniform_mse", "lloyd_mse", "uniform_cosine", "lloyd_cosine",
+        "lloyd_out_of_range")] for item in diagnostics])
+    np.savetxt(f"kashin_quantization_diagnostics_{timestamp}.csv", diagnostic_array,
+               delimiter=",", header="uniform_mse,lloyd_mse,uniform_cosine,lloyd_cosine,lloyd_out_of_range",
+               comments="")
 
     rounds = np.arange(1, NUM_ROUNDS + 1)
     fig, ax = plt.subplots(figsize=(10, 6))
