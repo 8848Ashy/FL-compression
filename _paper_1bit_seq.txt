@@ -1,0 +1,2409 @@
+----- PAGE 1 -----
+Order-Optimal Sequential 1-Bit Mean
+Estimation in General Tail Regimes
+IvanLauandJonathanScarlett
+NationalUniversityofSingapore
+Abstract
+Inthispaper,westudytheproblemofmeanestimationunderstrict1-bitcommunicationconstraints.Wepropose
+anoveladaptivemeanestimatorbasedsolelyonrandomizedthresholdqueries,whereeach1-bitoutcomeindicates
+whetheragivensampleexceedsasequentiallychosenthreshold.Ourestimatorispϵ,δq-PACforanydistributionwith
+aboundedmeanµPr´λ,λsandaboundedk-thcentralmomentEr|X´µ|ksďσkforanyfixedką1.Crucially,
+oursamplecomplexityisorder-optimalinallsuchtailregimes,i.e.,foreverysuchkvalue.Fork‰2,ourestimator’s
+samplecomplexitymatchestheunquantizedminimaxlowerboundsplusanunavoidableOplogpλ{σqqlocalization
+cost.Forthefinite-variancecase(k“2),ourestimator’ssamplecomplexityhasanextramultiplicativeOplogpσ{ϵqq
+penalty,andweestablishanovelinformation-theoreticlowerboundshowingthatthispenaltyisafundamentallimitof
+1-bitquantization.Wealsoestablishasignificantadaptivitygap:forboththresholdqueriesandmoregeneralinterval
+queries, the sample complexity of any non-adaptive estimator must scale linearly with the search space parameter
+λ{σ,renderingitvastlylesssampleefficientthanouradaptiveapproach.Finally,wepresentalgorithmicvariantsthat
+(i)handleanunknownsamplingbudget,(ii)adapttoanunknownscaleparameterσgiven(possiblyloose)bounds,
+and(iii)requireonlytwostagesofadaptivityattheexpenseofmorecomplicatedgeneral1-bitqueries.
+1 Introduction
+Meanestimationisoneofthemostfundamentalandubiquitoustasksinstatistics,machinelearning,andtheoretical
+computer science. In modern applications, such as those arising in large-scale sensor networks and decentralized
+federated learning, the learner rarely has direct access to raw data. Instead, communication bottlenecks often
+mandate that data samples be severely compressed prior to transmission. We address the absolute extreme of this
+communication-constrainedsetting,wherethelearnerreceivesonlyasinglebitoffeedbackpersample.Thisextreme
+quantizationraisesafundamentaltheoreticalquestion:
+Howdoes1-bitquantizationaffectthesamplecomplexityofmeanestimation?
+Wespecificallyfocusonthethresholdquerymodel,wherethelearnersequentiallysendsascalarthresholdtoanagent
+and receives a 1-bit indicator of whether the observed sample exceeds it. Beyond its simplicity, the threshold query
+modelnaturallycapturesinterestingreal-worldscenarioswhereobservingtheexactvalueofasampleisimpossible,
+but binary threshold crossings are easily observed. A canonical example is pricing in economics (Kleinberg and
+Leighton, 2003; Paes Leme et al., 2023): A seller cannot directly observe a buyer’s maximum willingness-to-pay
+(their hidden sample), but by offering a price, the seller observes a 1-bit purchasing decision indicating whether the
+buyer’sinternalvaluationexceedssaidprice.Similarmechanismsappearinbio-assaytesting,whereaspecimenreacts
+only if a viral load exceeds a dosage threshold, and in reliability engineering, where a component fails if a stressor
+exceedsitsphysicallimit.
+Apreliminaryversionofthisworkwaspresentedatthe29thInternationalConferenceonArtificialIntelligenceandStatistics(AISTATS2026)
+1
+6202
+rpA
+9
+]LM.tats[
+1v69770.4062:viXra
+----- PAGE 2 -----
+A significant challenge in 1-bit mean estimation is the loss of spatial information. When the location of the
+distribution’s core mass is highly uncertain (e.g., the mean lies somewhere in a massive range r´λ,λs), taking
+threshold queries in the “wrong” region yields sequences of all zeros or all ones, providing virtually no statistical
+information. This problem is severely exacerbated when the underlying distribution exhibits heavy tails, as the
+estimator must distinguish between rare, massive outlier samples and the true center of mass without being able to
+observethemagnitudeoftheoutliers.
+Inourpreliminaryconferenceversion(LauandScarlett,2025b),weproposedanadaptive1-bitmeanestimatorthat
+achieved near-optimal sample complexity for distributions with a bounded k-th central moment for k ě 2 (e.g.,
+distributions with finite variance or sub-Gaussian tails). However, that preliminary framework suffered from several
+notablelimitations.First,itwasentirelyunclearwhethertheframeworkcouldbegeneralizedtohandleheavy-tailed
+distributions where k P p1,2q. Second, it suffered from suboptimal logarithmic gaps between the upper and lower
+bounds.Finally,theestimatorreliedonthemoredemandinginterval-querymodel,requiringthelearnertoeffectively
+querytwoboundariessimultaneously.
+In this paper, we address these issues in detail by fundamentally restructuring the framework, in particular attaining
+thefollowingadvantages:
+• Threshold Queries and Heavy Tails: We replace the interval-query model with the simpler and more
+practically relevant threshold query model. Furthermore, by generalizing the framework of our preliminary
+version,weextendourestimatortosuccessfullyhandleheavy-taileddistributionswherek Pp1,2q.
+• Order-Optimalityforallk ą1:Toestimatethemeanusing1-bitfeedback,ourapproachpartitionsthesearch
+space into regions to estimate “local” probability masses. We replace the complicated, k-dependent spatial
+partitioningschemeofthepriorworkwithasimple,universalgeometricgrid.Bypairingthissinglegridwitha
+carefullytunedk-dependentsampleallocationstrategy,weeliminatethesuboptimallogarithmicfactorspresent
+intheconferenceversion,achievingorder-optimalsamplecomplexityacrossalltailregimesk ą 1.Whilethis
+isshownusingamatchinglowerboundfromtheunquantized settingwhenk ‰ 2,forthefinite-variancecase
+k “ 2wefurtherprovideanovellowerboundunder1-bitquantization(notpresentintheconferenceversion)
+thatshowsamultiplicativelogpσ{ϵqfactortobeunavoidable.
+SeeSection1.2foramoredetailedsummaryofourcontributions.
+1.1 ProblemSetup
+Distributionalassumption.LetX beareal-valuedrandomvariable1 withunknowndistributionD.Weassumethat
+D belongs to a (non-parametric) family D “ Dpk,λ,σq, defined by known parameters k ą 1 and λ ě σ ą 0; a
+distributionDisinthisfamilyifthefollowingconditionshold:
+1. Boundedmean:µpDqPr´λ,λs,2
+2. Boundedk-thcentralmoment:E|X´µ|k ďσk,
+wherek,λ,andσareknowntothelearner.NotethatthesupportofDmaybeunbounded.
+1-bitcommunicationprotocol.Thelearnerisinterestedinestimatingthepopulationmeanµ“µpDq“ErXsfromn
+independentandidenticallydistributed(i.i.d.)samplesX ,...,X „D,subjecttoa1-bitcommunicationconstraint
+1 n
+persample.Theestimationproceedsthroughaninteractiveprotocolbetweenalearnerandasinglememorylessagent3
+thatobservesi.i.d.samplesandsends1-bitfeedbacktothelearner.Specifically,fort“1,...,n:
+1Ourresultsalsohaveimplicationsforcertainmultivariatesettings;seeSection4.4fordetails.
+2Withoutlossofgenerality,wesetthesearchrangetobesymmetric.Notethatadependenceonthesearchrangeλisunavoidableinthe1-bit
+setting(seeTheorem9),butacrudeupperboundcanbeusedduetothemildlogarithmicdependenceinthesamplecomplexity(seeTheorem5).
+3Equivalently,thiscanbeviewedasasequenceofmemorylessagentswheretheagentineachroundmaybedifferent.Inparticular,theagentin
+roundtonlyhasaccesstoXtandnottotheprevioussamplesX1,...,Xt´1.
+2
+----- PAGE 3 -----
+1. Thelearnersendsa1-bitquantizationfunctionQ : RÑt0,1utoanagent;
+t
+2. TheagentobservesafreshsampleX „Dandsendsa1-bitmessageY “Q pX qtothelearner.
+t t t t
+` ˘
+After n rounds, the learner forms an estimate µˆ based on the entire interaction history Q ,Y ,...,Q ,Y . This
+1 1 n n
+(and similar) setting was also adopted in previous communication-constrained learning works, e.g., (Hanna et al.,
+2022;Mayekaretal.,2023;LauandScarlett,2025a).
+Thelearner’salgorithminthisprotocolisformallydefinedasfollows:
+Definition 1 (1-bit mean estimator). A 1-bit mean estimator is an algorithm for the learner that operates within the
+abovecommunicationprotocol.Itconsistsof
+1. A(potentiallyrandomized)querystrategyforselectingthequantizationfunctionsQ ,...,Q ,wherethechoice
+1 n
+ofQ candependadaptivelyonthehistoryofinteractionspQ ,Y ,...,Q ,Y q.
+t 1 1 t´1 t´1
+2. AnestimationrulethatmapsthefulltranscriptpQ ,Y ,...,Q ,Y qtoafinalestimateµˆ PR.
+1 1 n n
+We say that an estimator is non-adaptive if the query strategy selects all quantization functions in advance, without
+accesstoanyoftheoutcomesY ,...,Y .
+1 n
+Threshold query model. In the general problem formulation, we place no restriction on the choice of quantization
+function Q . However, motivated by the desire for “simple” choices in practice, we focus primarily on threshold
+t
+queries.Athresholdqueryyieldsa1-bitindicatorspecifyingwhetherasamplefallsonadesignatedsideofaspatial
+boundary. Formally, we define a threshold query as any quantization function of the form Q pxq “ 1tx ď γ u or
+t t
+Q pxq “ 1tx ě γ uforsomesequentiallychosenthresholdγ P R.4 Ourmainestimatorwillonlyusesuchqueries,
+t t t
+thoughwewillalsopresentavariantinSection4.3thatutilizesgeneral1-bitquantizationfunctions.
+Learner’s goal. The learner’s goal is to design a 1-bit mean estimator that returns an accurate estimate with high
+probability,whileusingasfewsamplesaspossible.Weformalizethisnotionasfollows:
+Definition2(pϵ,δq-PAC). Ameanestimatorispϵ,δq-PACfordistributionfamilyD withsamplecomplexitynpϵ,δq
+if,foreachdistributionD PD,itreturnsanϵ-correctestimateµˆwithprobabilityatleast1´δ,i.e.,
+foreachD PD, Prp|µˆ´µpDq|ďϵqě1´δ
+andthenumberofsamplesrequiredisboundedbynpϵ,δq.TheprobabilityistakenoverthesamplesX ,...,X and
+1 n
+anyinternalrandomnessoftheestimator.
+Notation. We use standard asymptotic notation Op¨q, Ωp¨q, and Θp¨q to hide absolute constants. When these hidden
+constantfactorsdependonthemomentparameterk,wemakethisdependenceexplicitusingthesubscriptednotation
+O p¨q,Ω p¨q,andΘ p¨q.
+k k k
+1.2 SummaryofContributions
+Withtheproblemsetupnowinplace,wesummarizeourmaincontributionsasfollows:
+• Adaptive1-BitMeanEstimator:Weproposeanoveladaptive1-bitmeanestimator(seeSection2.1)thatrelies
+solelyon(randomized)thresholdqueries.Itoperatesbyfirstlocalizingthedistribution’scoreviaanoisybinary
+search,andsubsequentlyestimatinglocalprobabilitymassesoverauniversalgeometricgridpairedwithalocal
+variance-awaresampleallocationstrategy.
+4Sincewedonotassumetheunderlyingdistributioniscontinuous,thecomplementoftheeventtXt ďγuisthestrictinequalitytXt ąγu,
+whichdiffersfromtXt ě γuifthedistributioncontainsapointmassatthethresholdγ.Foranalyticalconvenience,weformallyallowboth
+inclusiveinequalities(ďandě)inourthresholdquerymodel.However,evenifonlyonedirectionisallowed,wecaneasilyhandlethisbyadding
+veryslight(continuous-valued)randomizationtothevaluesofaiandbiusedinouralgorithm(seeSection2.1).
+3
+----- PAGE 4 -----
+• Order-OptimalSampleComplexity:Weprovethatthisestimatorispϵ,δq-PACforthegeneralizeddistribution
+family Dpk,λ,σq for any fixed k ą 1. Despite its structural simplicity, our approach strictly tightens and
+generalizestheboundsfromourpreliminaryconferenceversion(LauandScarlett,2025b),entirelyeliminating
+the suboptimal logarithmic factors caused by unoptimized search space partitioning (see Remark 7). The
+resultingsamplecomplexityachievesstrictorder-optimalityacrossalltailregimesk ą1.
+• Lower Bound in the Finite Variance Case: For k ‰ 2, the sample complexity matches the unquantized
+minimaxrateplusanadditivelogpλ{σqlocalizationcostthatweprovetobeunavoidable(seeTheorems5and9).
+Forthefinite-variancecase(k “2),ourupperboundcontainsanadditionalOplogpσ{ϵqqfactorcomparedtothe
+unquantizedminimaxrate.Weestablishanovelinformation-theoreticlowerboundprovingthatthislogarithmic
+penalty is a fundamental, inescapable consequence of 1-bit quantization, thereby confirming our estimator’s
+optimalityfork “2.
+• LowerBoundProvinganAdaptivityGap:Ouradaptivesamplecomplexityboundscalesonlylogarithmically
+withλ{σ,whichcontrastswithexistingboundsforcommunication-constrainednon-parametricmeanestimators
+scalingatleastlinearlyinλ(seeSection1.3).Forthethreshold-queryandamoregeneralinterval-querymodel,
+we establish an “adaptivity gap” by showing a worst-case lower bound Ωpλσ{ϵ2 ¨logpδ´1qq for non-adaptive
+estimators(seeTheorem11),inparticularhavingalineardependenceonλ.
+1.3 RelatedWork
+Therelatedworkoncommunication-constrainedmeanestimationisextensive;weonlyprovideabriefoutlinehere,
+emphasizingthemostcloselyrelatedworks.
+Classicalmeanestimation.Meanestimation(intheunquantizedsetting)isafundamentalandwell-studiedproblemin
+statistics,e.g.,see(LeeandValiant,2022;Cherapanamjerietal.,2022;Minsker,2023;Dangetal.,2023;Guptaetal.,
+2024)andthereferencestherein.Thestate-of-the-artpϵ,δq-PACestimatorby(LeeandValiant,2022)achievesatight
+samplecomplexityn“p2`op1qq¨pσ2{ϵ2q¨logp1{δqforalldistributionswithfinitevarianceσ2.Beyondthefinite-
+varianceregime,significantattentionhasbeendevotedtorobustestimationforheavy-taileddistributionswhereonly
+afractionalcentralmomentk P p1,2qisbounded(Bubecketal.,2013;Devroyeetal.,2016;LugosiandMendelson,
+` ˘
+2019a). In this regime, the unquantized minimax sample complexity is known to scale as Θ pσ{ϵqk´ k 1 logp1{δq .
+Collectively,theseunquantizedratesserveasanaturalbenchmarkformeanestimationproblemsundercommunication
+constraints.
+Communication-constrained estimation and learning. Early work in communication-constrained estimation,
+learning, and optimization was motivated by the applications of wireless sensor networks (see (Xiao et al., 2006;
+Varshney,2012;VeeravalliandVarshney,2012;Heetal.,2020)andthereferencestherein),witharecentresurgence
+drivenbytheriseoflarge-scalemachinelearningsystems.Thishasledtothecharacterizationofthesamplecomplexity
+or minimax risk/error for various communication-constrained estimation problems (Zhang et al., 2013; Garg et al.,
+2014;Shamir,2014;Bravermanetal.,2016;XuandRaginsky,2017;Hanetal.,2018a,b;Barnesetal.,2019,2020;
+Acharyaetal.,2020a,b,2021a,b,d,2023;Shahetal.,2025).
+Whileabundant,mostoftheexistingliteraturediffersinmajoraspectsincludingtheestimationgoalitself,theuseof
+parametricmodels,and/orimposingsignificantlystrongerassumptions.Toourknowledge,noneoftheexistingwork
+on non-parametric communication-constrained estimation captures our problem setup. For example, non-parametric
+density estimation (Barnes et al., 2020; Acharya et al., 2021c) is an inherently harder problem, and accordingly the
+authors impose certain regularity conditions on the density function (e.g., belonging to Sobolev space). Similarly,
+communication-constrainednon-parametricfunctionestimationproblemsin(ZhuandLafferty,2018;Szabo´ andvan
+Zanten,2018,2020;CaiandWei,2022b;ZamanandSzabo´,2022)assumecertaintailboundsonthelikelihoodratio
+(e.g.,Gaussianwhitenoisemodel).
+Communication-constrained mean estimation. Several works study variants of mean estimation under
+communication constraints directly. A large body of work focuses on parametric settings, often assuming a
+known location-scale family (Kipnis and Duchi, 2022; Kumar and Vatedka, 2025) with a particular emphasis on
+Gaussians (Ribeiro and Giannakis, 2006a; Cai and Wei, 2022a, 2024). These estimators crucially rely on CDF
+4
+----- PAGE 5 -----
+inversion, which are highly dependent on exact knowledge of the parametric family, and are not suitable for our
+non-parametricsetting.Thenon-parametricmeanestimatorsin(Luo,2005;RibeiroandGiannakis,2006b)canhandle
+broader distributional families but require additional assumptions such as bounded support and/or smooth density
+functions.Furthermore,someoftheseestimatorsrequiremorethan1bitoffeedback(percoordinate)persample.A
+recentindependentworkonnon-adaptive1-bitmeanestimation(AbdallaandChen,2026)partiallycircumventsthese
+restrictiveassumptions.However,theirestimatoradoptsafixedquantizationrangewhosewidthscalesasΩpσ2{ϵqin
+theworstcase,5andthistranslatestoasamplecomplexityofΩpσ4{ϵ4q.Incontrast,ouradaptive1-bitmeanestimator
+r
+achievesOpσ2{ϵ2qratesforalldistributionswhosefirsttwomomentsliewithinknownbounds.
+Empirical vs. population mean estimation. A closely related line of work focuses on distributed empirical mean
+estimationofafixeddataset,whichisakeyprimitiveinfederatedlearning(Sureshetal.,2017;Konecˇny`andRichta´rik,
+2018;Daviesetal.,2021;Vargaftiketal.,2021;Mayekaretal.,2021;Vargaftiketal.,2022;Ben-Basatetal.,2024;
+Babu et al., 2025). These estimators typically achieve a minimax optimal mean squared error (MSE) that scale as
+Erpµˆ´µ q 2 s “ Opλ2{nq.ByusingMarkov’sinequalityandthemedian-of-meansmethod,theycanbeconverted
+emp
+r
+to pϵ,δq-PAC population mean estimator with a sample complexity of n “ Opλ2{ϵ2 ¨ logp1{δqq. In contrast, our
+r
+meanestimatorachievesasamplecomplexityofOpσ2{ϵ2¨logp1{δq`logpλ{σqq,whichisconsiderablysmallerwhen
+σ2 ! λ2.AlthoughsomeempiricalmeanestimatorsachieveMSEthatdependsonempiricaldeviation/varianceσ
+emp
+ofthefixeddataset(RibeiroandGiannakis,2006b;Sureshetal.,2022),theyrequireaboundedsupport.Furthermore,
+theirMSEscalesatleastlinearlywithλ,e.g.,theonein(Sureshetal.,2022)scalesasErpµˆ´µ q 2 s“Opσ λ{n`
+emp emp
+λ2{n2q. Consequently, converting them to pϵ,δq-PAC population mean estimator using standard techniques would
+resultinasamplecomplexityboundthatscalesatleastlinearlywithλ.
+2 Estimator and Upper Bound
+Inthissection,weintroduceour1-bitmeanestimatorandprovideitsperformanceguarantee.Ourestimatorisdesigned
+as a target-accuracy driven procedure that takes parameters pk,λ,σ,ϵ,δq as input. It operates to ensure the desired
+accuracyϵisattainedwithprobabilityatleast1´δ whileminimizingthesamplecomplexityn,andhencedoesnot
+haveanexplicitpre-specifiedsamplebudget.However,theestimatorcanreadilybeappliedtothefixed-budgetsetting
+where the sampling budget is given and the goal is to minimize the estimation error ϵ. In Section 4.1, we address a
+hardervariantofthis,wherenisfixedbutunknowntothelearner.
+Beforedetailingthemechanicsoftheestimator,wefirstestablishastructuralpropertyofthedistributionfamilythat
+simplifiestheanalysisfor(very)light-taileddistributions.
+Remark3(Reductiontok ď3). ByLyapunov’sinequality,anydistributioninDpk,λ,σqfork ą3satisfies
+` ˘ ` ˘
+Er|X´µ|3s 1{3 ď Er|X´µ|ks 1{k ďσ.
+Thus,whenk ą3,thedistributionisinherentlyamemberofDp3,λ,σq.Consequently,foranydistributionwith“very
+light”tails(e.g.,k " 3),ourestimatorcansafelyprocessthesamplesusingan“operative”momentparameterof3.
+Therefore,withoutlossofgenerality,weassumethemomentparametersatisfiesk P p1,3sfortherestofthepaper.
+ThiswillbeconvenientfortheanalysisinAppendixA,ensuringthatk-dependentconstants(e.g.,2k)remainsuitably
+bounded.
+2.1 DescriptionoftheEstimator
+Our estimator first localizes an interval I of length Opσq containing the mean µ with high probability (see Step 1
+below). Using the mid-point of I as the “centre”, it identifies a cutoff threshold t such that the contribution to the
+5Toboundtheworst-casetruncationbiasbyOpϵqunderonlyafinite-varianceassumption,itcanbeshownthatonemustsettherangetobe
+Ωpσ2{ϵqduetotheworst-casetightnessofCantelli’sinequality(aone-sidedversionofChebyshev’sinequality).
+5
+----- PAGE 6 -----
+mean from the “insignificant region” |X| ą t is at most ϵ{2 (see Step 2). Finally, it forms an estimate of the mean
+contributionfromthe“significantregion”|X|ďttowithinanadditiveerrorofϵ{2(seeSteps3–6).
+This high-level strategy of performing “localization” (coarse estimation) and “refinement” (finer estimation) has
+appeared in prior works such as (Cai and Wei, 2022a), but with very different details, particularly for refinement.
+The key idea behind our refinement procedure is to partition the significant region into sub-regions, and optimally
+allocatesamplestoestimatethecontributionfromeachsub-regionusingrandomizedthresholdqueries.
+Ourmeanestimatorisoutlinedasfollows,withanyomitteddetailsdeferredtoAppendixA:
+1. Localization:Usingexistingmedianestimationtechniq`ues,welocaliz˘eahighprobabilityconfidenceinterval
+rL,UscontainingthemedianM usingn pδ,λ,σq“Θ log λ `log1 1-bitthresholdqueries.Bytheproperty
+loc σ δ
+|ErXs´M| ď σ,theintervalrL´σ,U `σscontainsthemeanwithhighprobability.Itcanbeverifiedthat
+thisintervalhas lengthatmost8σ. Withoutlossofgenerality, wemayshiftourcoordinate systemsothatthe
+midpointoftheintervalisexactly0,i.e.,theshiftedmeaniscontainedinr´4σ,4σs.
+2. CutoffThresholdSelection:Weidentifyacutoffthresholdtą8σ ě|µ|suchthatthemeancontributionfrom
+the“insignificant region”isbounded by|ErX¨1p|X|ątqs| ď ϵ{2, sothatthey canbeestimated asbeing0.
+Foradistributionwithaboundedk-thmoment,itissufficienttochoose
+ˆ ´ ¯ ˙
+σ 1{pk´1q
+t“Θ σ¨ .
+ϵ
+for a distribution with bounded k-th moment. It remains to form a final high-probability estimate µˆ of the
+“clippedmean”ErX¨1p|X|ďtqssatisfying|µˆ´ErX¨1p|X|ďtqs|ďϵ{2.
+3. Significant Region Partitioning: We partition the significant region r´t,ts into non-overlapping symmetric
+regionsR ,R ,R ,R ,...,R ,R definedbyexponentiallygrowingintervalboundariesm σ:
+1 ´1 2 ´2 imax ´imax i
+$
+’&σ¨rm ,m q ifiě1
+i´1 i
+R “ where m “0andm “2iforiě1. (1)
+i ’% 0 i
+´R ifiď´1
+i
+Themaximumindexi ischosensuchthatm σ ě t,yieldingi “ Θp 1 logpσqq.Sincetheclipped
+max imax max k´1 ϵ
+meanisthesumofthelocalcontributionsµ :“ErX¨1pX PR qs,wecanestimateeachµ separately.
+i i i
+4. Region-WiseThresholdQueries:ForeachregionR “ra ,b q,thelearnerestimatesitsmeancontributionµ
+i i i i
+using randomized threshold queries. We define the auxiliary probabilities based on a random threshold T „
+i
+Unifpa ,b q:
+i i
+p :“PrpX ěa q´PrpX ěT q“Er1tX ěa us´Er1tX ěT us (2)
+ai i i i i
+and
+p :“PrpX ďb q´PrpX ďT q“Er1tX ďb us´Er1tX ďT us. (3)
+bi i i i i
+Byexploitingtheidentity
+µ “a ¨p `b ¨p ,
+i i ai i bi
+thetaskofestimatingµ reducestoestimatingtheprobabilitiesp andp .Assuggestedby(2)and(3),these
+i ai bi
+canbeestimatedviathresholdqueries.Specifically,forapredeterminedsamplebudgetn (specifiedinStep5),
+i
+thelearnercollectsn independent1-bitresponsesforeachofthefollowingfourquerytypes:
+i
+1tX ěa u, 1tX ěT u, 1tX ďb u, and 1tX ďT u,
+i i i i
+wherethedatasamplesX andrandomthresholdsT „Unifpa ,b qarefreshlysampledforeachquery.Taking
+i i i
+the empirical averages of these responses yields the unbiased probability estimates pˆ and pˆ , which are
+ai bi
+combinedtoformtheunbiasedlocalestimateµˆ “a ¨pˆ `b ¨pˆ .
+i i ai i bi
+6
+----- PAGE 7 -----
+5. Base Estimator and Sample Allocation: Summing the local estimates from all significant regions yields a
+singleunbiased“baseestimator”fortheclippedmean:
+ÿ
+µˆ “ µˆ .
+base i
+|i|ďimax
+To achieve the final pϵ,δq-PAC guarantee through median-of-means (see Střep 6), it is sufficient for this base
+estimator to satisfy a global variance constraint of the form Varpµˆ q “ Varpµˆ q “ Opϵ2q. The learner
+base i i
+achieves this by setting the regional sample budget n to scale according to the decay of the local variance
+i
+Varpµˆ q.Specifically,thesampleallocationissetto:
+i
+ˆ ˙
+σ2
+n “Θ ¨2|i|p2´kq .
+i ϵ2
+This allocation guarantees the target variance while yielding an order-optimal sample complexity for a single
+baseestimator: $ ˆ ˙
+ÿ
+’’’’’’’’’’’&
+O
+k
+ˆ
+σ
+ϵ2
+2
+´ ¯˙
+ifk ą2
+σ2 σ
+n “ O ¨log ifk “2
+|i|ďimax
+i ’’’’’’’’’’’%O
+ˆ
+ϵ
+´
+2
+σ
+¯
+k´
+k
+1
+˙
+ϵ
+ifk Pp1,2q,
+k ϵ
+whereO p¨qrepresentsOp¨qnotationwithahiddenconstantthatdependsonk.
+k
+6. Median-of-Means: While the base estimator µˆ successfully bounds the variance to Opϵ2q, it provides an
+base
+ϵ-accurate estimate with only a constant probability. To boost the success probability to 1 ´ δ, the learner
+wraps the base estimator in a median-of-means framework. The learner repeats Steps 4 and 5 independently
+K “Θplogp1{δqqtimestogenerateK independentbaseestimatesµˆp1q,...,µˆpKq.Thefinaloutputofthe1-bit
+base base
+meanestimatoristheirmedian: ´ ¯
+µˆ “median µˆp1q,...,µˆpKq .
+base base
+Remark 4 (Algorithmic Advancements over Preliminary Version). While the high-level spatial partitioning
+architecture shares structural similarities with our preliminary conference version (Lau and Scarlett, 2025b), the
+frameworkoftheestimatorhasbeencarefullyrefinedtoachieveorder-optimalityforalltailregimes.First,wereplace
+the interval-query model with a simpler threshold-query model, estimating local probability masses purely through
+differencesinempiricalthresholdcrossings(Step4).Second,weextendtheestimationframeworktohandleheavy-
+taileddistributionswherek P p1,2q(Step5),whilesimultaneouslydiscardingthecomplicatedk-dependentpartition
+boundaries of the prior work in favor of a simple, universal geometric grid (m “ 2i). Finally, instead of relying
+i
+on crude union bounds to guarantee the accuracy of every local region simultaneously, we deploy a variance-aware
+local sample allocation (Step 5) paired with a median-of-means aggregator (Step 6). This effectively decouples the
+globalpϵ,δq-PACrequirementfromthegranularityofthespatialgrid,whichisthekeytoeliminatingthesuboptimal
+logarithmicsamplecomplexitypenaltiespresentinthepreviousframework.
+2.2 Upperbound
+We now formally state the main result of this paper, which is the performance guarantee of our mean estimator in
+Section2.1.TheproofisdeferredtoAppendixA,wherewealsoprovidetheomitteddetailsintheaboveoutline.
+Theorem 5. The mean estimator given in Section 2.1 is pϵ,δq-PAC for distribution family Dpk,λ,σq, with sample
+7
+----- PAGE 8 -----
+complexity
+$ ˆ ˆ ˙˙
+ˆ ˆ ˙˙
+’’’’’’’’’’’&
+O
+k
+ˆ
+σ
+ϵ2
+2
+¨log
+´
+1
+δ
+¯ ˆ ˙˙
+ifk ą2
+λ σ2 σ 1
+n“O log ` O ¨log ¨log ifk “2 (4)
+σ ’’’’’’’’’’’%O
+ˆ
+ϵ
+´
+2
+σ
+¯
+k´
+k
+1
+ϵ
+¨log
+ˆ
+1
+˙
+δ
+˙
+ifk Pp1,2q,
+k ϵ δ
+whereO p¨qrepresentsOp¨qnotationwithahiddenconstantthatdependsonk.
+k
+Next, suppose that X ´ µ is sub-Gaussian with known parameter σ2. Then X has its finite third central moment
+boundedbypCσq3 forsomeabsoluteconstantC.Therefore,theabovemeanestimatorcanbeusedforsub-Gaussian
+distributionstoo.
+Corollary 6. Suppose that X ´µ is sub-Gaussian with known parameter σ2. Then there exists an pϵ,δq-PAC 1-bit
+meanestimatorwithsamplecomplexity
+ˆ ˆ ˙ ˙
+σ2 1 λ
+n“O ¨log `log .
+ϵ2 δ σ
+Thus,wematchtheminimaxlowerboundfortheunquantizedsetting(see(LeeandValiant,2022,p.2)and(Devroye
+etal.,2016,Theorem3.1))uptoconstantfactorsfork ‰2anduptoamultiplicativelogpσ{ϵqfactorfork “2,along
+withanadditionallogpλ{σqtermforallk ą 1;bothoftheseextratermsareshowntobeunavoidableinTheorem9.
+We also study variants where pϵ,σq are not prespecified in Sections 4.1 and 4.2; and a variant that uses only two
+rounds/stagesofadaptivityinSection4.3.
+Remark 7 (Tightened Rates and Order-Optimality). The algorithmic advancements described in Remark 4 yield
+strictly tightened and generalized upper bounds compared to our preliminary conference version (Lau and Scarlett,
+2025b).Specifically,weachievethefollowingimprovementsacrossthetailregimes:
+1. Heavy-tailed distributions (k P p1,2q): We achieve strict order-optimal sample complexity for heavy-tailed
+distributions, an important regime that was entirely unaddressed in the preliminary version, without requiring
+anyad-hocstructuralchangestotheunderlyingestimator.
+2. Light-tailed and sub-Gaussian distributions (k ą 2): We completely eliminate the suboptimal doubly
+logarithmicfactorsforlight-taileddistributions,anditeratedlogarithmicfactorsforsub-Gaussiandistributions,
+yieldingstrictorder-optimalrates.
+3. Finite-variancedistributions(k “ 2):Weshavetwologa`rithmicfa˘ctorsofftheprevioussample`complexity˘,
+matchingtheunquantizedminimaxbounduptoasingleO logpσ{ϵq factor(asopposedtotheO log3pσ{ϵq
+gap in (Lau and Scarlett, 2025b)). We establish in Section 3 that this remaining logarithmic factor is not an
+artifact of our spatial partitioning, but rather a fundamental information-theoretic limit of 1-bit quantization.
+Consequently,ourestimatorachievesorder-optimalityacrossalltailregimesk ą1.
+Remark8(k-DependentConstantFactorsandthePhaseTransitionatk “ 2). Thesubscriptedasymptoticnotation
+O
+k
+p¨q hides k-dependent constant factors that diverge as the moment pa`rameter k approache˘s the finite-variance
+boundary (k Ñ 2). Sp`ecifically, the hidden˘ k-dependence scales as Θ maxp1,pk ´ 2q´1q for the light-tailed
+regime k ą 2, and Θ maxp1,p2 ´ kq´1q for the heavy-tailed regime k P p1,2q. This dual-sided divergence
+characterizesaphasetransitionintheestimator’sbehaviorarisingfromthespatialpartitioningarchitecture.Ask Ñ2,
+the geometric series governin`g our sam˘ple allocation flattens into a uniform sum (see Step 5(c) of Appendix A),
+organicallymanifestingtheO logpσ{ϵq penaltythatisaninescapableinformation-theoreticcostof1-bitquantization
+(seeSection3).
+8
+----- PAGE 9 -----
+3 Lower Bounds and Adaptivity Gap
+Inthissection,weestablishtheinformation-theoreticlimitsof1-bitmeanestimationvialowerboundsonthesample
+complexity.Wefirstprovide,inTheorem9,aminimaxlowerboundthatmatchesourupperboundinTheorem5up
+toconstantsacrossalltailregimes.Inparticular,weshowthattheadditivelogpλ{σqlocalizationtermisunavoidable,
+and we reveal a novel quantization penalty unique to finite-variance distributions. Subsequently, in Theorem 11, we
+showthatthebestnon-adaptivemeanestimatorisstrictlyworsethanouradaptivemeanestimatorwhenonlythreshold
+queriesareallowed,andthatthesameholdsevenunderamoregeneralintervalquerymodel.Thisestablishesastrict
+“adaptivitygap”betweentheperformanceofadaptiveandnon-adaptivequerybasedmeanestimatorsunderthreshold
+and/orintervalqueries.TheproofsforallofourlowerboundsaregiveninAppendixB.
+Theorem 9 (Matching Lower Bound). For any pϵ,δq-PAC 1-bit mean estimator, and any ϵ ď cσ (for a sufficiently
+smallconstantc ą 0)andλ ě 3ϵ,thereexistsadistributionD P Dpk,λ,σqsuchthatthenumberofsamplesnmust
+satisfy $ ˆ ˆ ˙˙
+ˆ ˆ ˙˙
+’’’’’’’’’’’&
+Ω
+ˆ
+σ
+ϵ2
+2
+¨log
+´
+1
+δ
+¯ ˆ ˙˙
+ifk ą2
+λ σ2 σ 1
+n“Ω log ` Ω ¨log ¨log ifk “2
+σ ’’’’’’’’’’’%Ω
+ˆ´
+ϵ2
+σ
+¯
+k´
+k
+1 ¨
+ϵ
+log
+ˆ
+1
+˙˙
+δ
+ifk Pp1,2q
+ϵ δ
+Remark10(TheFinite-VariancePenalty). AsurprisingfeatureofTheorem9isthestrictseparationbetweenfinite-
+variance(k “ 2)andlight-tailed(k ą 2)distributions.Intheunquantizedsetting,bothregimesshareabasesample
+complexity of Θpσ2{ϵ2 ¨logp1{δqq, whereas Theorem 9 establishes that 1-bit communication constraints force the
+k “2regimetouniquelyincuranadditionalmultiplicativelogpσ{ϵqpenalty.
+Tostatethesecondresult,weformallydefineanintervalquerytobeanyqueryoftheformQ pxq “ 1tx P rα ,β su
+t t t
+for some pair pα ,β q, possibly with α “ ´8 or β “ 8. When α “ ´8 (respectively, β “ 8), we trivially
+t t t t t t
+recover the threshold query 1tx ď β u (respectively, 1tx ě α u), so interval queries strictly generalize threshold
+t t
+queries.
+Theorem11(AdaptivityGap). Foranynon-adaptivepϵ,δq-PACmeanestimatorutilizingonlyintervalqueries,and
+any target accuracy ϵ ă σ{2, there exists a distribution supported on an interval of length σ (and therefore sub-
+Gaussian)withmeanµPr´λ,λssuchthatthetotalnumberofqueriesnmustsatisfy:
+ˆ ˆ ˙˙
+λσ 1
+n“Ω ¨log .
+ϵ2 δ
+BecausethefamilyofdistributionswithboundedsupportoflengthσisastrictsubsetofDpk,λ,σqforallk ě1,this
+non-adaptivelowerbounduniversallyappliestoalltailregimesstudiedinthispaper.
+In the remainder of this section, we discuss the high-level proof ideas. Setting aside the multiplicative logpσ{ϵq
+penalty unique to the k “ 2 regime momentarily, the remaining lower bounds (i.e., tail regimes for k ‰ 2 and
+the additive logpλ{σq localization cost) are established by constructing a finite “hard subset” of distributions that
+capture two distinct sources of difficulty: (i) “coarsely” identifying the distribution’s location in r´λ,λs among
+Θpλ{σq possibilities, and (ii) “finely” estimating the mean by distinguishing between two candidate distributions
+atthatlocationwhosemeansdifferby2ϵ.Thefineestimationstepinherentlydictatesthe“base”samplecomplexity
+for each respective tail regime based on standard hypothesis testing lower bounds, i.e., Ωpσ2 ¨logp1{δqq for k ě 2
+ϵ2
+andΩppσqk´ k 1 ¨logp1{δqqfork P p1,2q.However,thedependencyonλ{σarisingfromthecoarseidentificationstep
+ϵ
+differsfundamentallyinadaptivevs.non-adaptivesettings:
+• InTheorem9(adaptivesetting),wecansimplyinterprettheadditivelogarithmicdependenceasthenumberof
+bitsneededtoidentifythecorrectlocationamongtheΘpλ{σqpossibilities,witheachquerygivingatmost1bit
+ofinformation.
+9
+----- PAGE 10 -----
+• In Theorem 11 (non-adaptive setting), the multiplicative dependence arises because the estimator needs to
+allocate enough queries in every one of the Θpλ{σq possible locations simultaneously, as it does not know
+thecorrectlocationinadvance.
+WenotethatthedistributedGaussianmeanestimatorin(CaiandWei,2024)isnon-adaptiveandachievesanorder-
+optimal MSE. However, their estimator is highly specific to Gaussian distributions, and their quantization functions
+arenotbasedonintervalqueries.Wewillbuildupontheirlocalizationstrategyinourtwo-stagevariant(Section4.3),
+butweavoidtheirrefinementstrategy,whichreliesonCDFinversionandisinherentlyGaussian-specific.
+Next, we outline the proof idea for the lower bound showing that the logpσ{ϵq penalty is unavoidable when k “ 2.
+W`e define a˘hard-to-distinguish hypothesis testing problem over a geometric grid x
+j
+“ 2j ¨σ for j “ 1,...,M “
+Θ logpσ{ϵq .Thetwodistributionsareasfollows:
+• The null distribution D is a symmetric, zero-mean distribution obtained by placing probability mass q “
+` ˘ 0 j
+Θ σ2 at each pair of points ˘x , with the remaining mass placed at the origin. Each pair contributes
+Mx2 j
+j
+Θpσ2{Mqtothevariance,exhaustingtheprescribedvariancebudgetσ2.
+ř
+• The alternative D¯ is a uniform mixture D¯ “ 1 M D , where each constituent distribution D is formed
+M j“1 j j
+from D by shifting a small mass p “ Θpϵ{x q from ´x to `x . This creates a mean shift of Θpϵq while
+0 j j j j
+satisfyingtheglobalvarianceconstraint.
+NotethatsamplingfromD¯ isequivalenttofirstpickinganindexj uniformlyatrandomandthendrawingasample
+from D . Because the learner does not know which j was chosen, any 1-bit query faces a fundamental signal-to-
+j
+noisebottleneck:targetingspecificgridpointsdilutestheexpectedsignalbyafactorof1{M,whilequeryingbroad
+regionsaccumulatesexcessivebaselinen`oisef˘romD
+0
+.Formally,theper-queryKLdivergencebetweentheBernoulli
+response distributions is bounded by O ϵ2 , which is smaller than the counterpart Opϵ2{σ2q in the unquantized
+Mσ2
+setting`. Applying the˘chain`rule for KL di˘vergence over n adaptive rounds forces the sample complexity to scale as
+n“Ω M ¨ σ2 log1 “Ω σ2 logσ log1 .
+ϵ2 δ ϵ2 ϵ δ
+Crucially, the above argument breaks down in the lighter-tailed regime pk ą 2q. This stems from the fact that the
+ř
+contribution from ˘x scales as q xk “ Θpσ2xk´2q; then, because x grows exponentially, the sum M xk´2
+j j j M j j j“1 j
+diverges rapidly when k ą 2. Thus, to keep the k-th central moment bounded by σk, the grid mu`st be trun˘cated to
+M “Op1qpoints.Thus,the“logarithmichidingspace”vanishes,andthelowerboundrevertstoΩ σ2 log1 .
+ϵ2 δ
+4 Variations and Refinements
+ThemainestimatordevelopedinSection2.1operatesunde`raspecificseto˘fconditions:itassumesthetargetaccuracyϵ
+and scale parameter σ are known a priori, it utilizes O log λ ` log1 rounds of sequential adaptivity, and it is
+σ δ
+restrictedtounivariatedistributions.Inthissection,wepresentfouralgorithmicextensionsthatrelaxtheseconstraints.
+Specifically,Section4.1modifiestheprotocoltooperatewithoutaprespecifiedtargetaccuracy,yieldingan“anytime”
+estimator that adapts to an unknown sampling budget. Section 4.2 details an approach for adapting to an unknown
+scale parameter σ when only loose bounds are available. Section 4.3 demonstrates how trading the threshold-query
+model for general 1-bit queries can drastically reduce the interaction down to just two stages of adaptivity. Finally,
+Section4.4outlinesthegeneralizationofourframeworktomultivariatemeanestimationinRd.
+4.1 UnknownTargetAccuracy
+Our estimator as described in Section 2.1 takes the target accuracy ϵ as an input and consumes a bounded number
+of samples. Conversely, if a fixed sampling budget n is pre-specified, one can invert the sample complexity bound
+in(4)todeterminethebestachievabletargetaccuracyϵ˚ “ϵpn,k,δ,λ,σq.Runningtheestimatorwiththisparameter
+naturallyyieldsanϵ˚-accurateestimatewhilerespectingthebudgetn.
+10
+----- PAGE 11 -----
+Wenowconsiderthe“anytime”estimationscenariowherethetruesamplebudgetn isnotpre-specifiedinadvance
+true
+(e.g.,duetodynamicclientdropoutsoruncertaincommunicationhorizons),buttheotherparametersk,δ,λ,andσ
+remainknown.Inthissetting,thealgorithmcannotpre-computetheoptimaloracleaccuracyϵ˚.Anaiveapproachof
+guessingatargetaccuracyϵ isbrittle:aconservativeguessthatistoolargeyieldsanunnecessarilycoarseestimate,
+guess
+whileanoverlyoptimisticguessexhauststhebudgetprematurelywithoutformingavalidestimate.
+To overcome this, we employ a standard halving trick on ϵ (along with a careful decay schedule of the failure
+guess
+probability δ) to “anytime-ify” the mean estimator. To formalize this sequential procedure, let npϵ,δ,k,λ,σq “
+n pδ,λ,σq`n pϵ,δ,k,σqdenotethetotalsamplecomplexityofasinglerun,where
+loc ref
+ˆ ˙
+λ 1
+n pδ,λ,σq“Θ log `log
+loc σ δ
+isthenumberofsamplesusedinthelocalizationstepofourmeanestimator(seeStep1ofSection2.1),and
+$ ˆ ˆ ˙˙
+’’’’’’’’’’’&
+Θ
+k
+ˆ
+σ
+ϵ2
+2
+¨log
+´
+1
+δ
+¯ ˆ ˙˙
+ifk ą2
+σ2 σ 1
+n pϵ,δ,k,σq“ Θ ¨log ¨log ifk “2 (5)
+ref ’’’’’’’’’’’%Θ
+ˆ
+ϵ
+´
+2
+σ
+¯
+k´
+k
+1
+ϵ
+¨log
+ˆ
+1
+˙
+δ
+˙
+ifk Pp1,2q,
+k ϵ δ
+isthenumberofsamplesusedintherefinement(Steps2-6).
+The anytime estimator proceeds as follows. We run the localization step (see Step 1 of Section 2.1) once, which
+requiresknowingonlytheparameterspδ,λ,σqandconsumesn pδ,λ,σqsamples.Thenforeachroundτ “1,2,...,
+loc
+weruntheremainingrefinementsteps(Steps2-6)withprogressivelytightenedparameters6
+σ 6δ
+pϵ ,δ ,k,σq where ϵ “ and δ “ . (6)
+τ τ τ 2τ τ π2τ2
+Eachroundτ consumesanadditionaln pϵ ,δ ,k,σqsamples.Theestimatorproceedstothenextroundaslongasthe
+ref τ τ
+cumulativesamplesdonotexceedthetruesamplingbudgetn .Whenthetruesamplingbudgetisfinallyexhausted,
+true
+theestimatorterminatesandoutputsthelastfullycomputedestimateµˆ ,where
+T
+# +
+ÿτ
+T “max n pϵ ,δ ,k,σqďn ´n pδ,λ,σq (7)
+ref s s true loc
+τě1
+s“1
+ř
+isthefinalroundwherethesubroutineiscompleted.Bytheunionboundp δ ďδqandthePACguaranteeofeach
+τ τ
+subroutine,wehavewithprobabilityatleast1´δ thateveryestimateµˆ formedisϵ -accurate.Inparticular,under
+τ τ
+thishigh-probabilityevent,thefinaloutputµˆ satisfies
+T
+σ
+|µˆ ´µ|ďϵ “ .
+T T 2T
+Toevaluatetheoptimalityofthisanytimeestimator,wecompareϵ againstthe“oracleaccuracy”ϵ˚,implicitlydefined
+T
+astheoptimaltargetaccuracyachievablehadn beenknownapriori:
+true
+n pϵ˚,δ,k,σq“n ´n pδ,λ,σq.
+ref true loc
+Underamildassumptionthatthetruebudgetn issufficientlylargetocompletethelocalizationstepandthefirst
+true
+refinement round, we show that that our anytime estimator matches the oracle accuracy up to a doubly-logarithmic
+factor.
+6Alternatively,wecouldpickanysuitableϵ0astheinitialtargetaccuracyandletϵτ “ϵ0{2τ´1.
+11
+----- PAGE 12 -----
+Theorem12. Undertheprecedingsetup,assumingn ěn pδ,λ,σq`n pϵ ,δ ,k,σq,wehave
+true loc ref 1 1
+˜ ˆ ˙ ¸
+1
+loglogpσ{ϵ˚q p
+ϵ “O ϵ˚ 1`
+T logp1{δq
+wherep“2ifk ě2,andp“ k ifk Pp1,2q.
+k´1
+Thecruxoftheproofliesinthefactthatacrossalltailregimesk ą 1,therefinementcomplexityn pϵ,¨qscalesat
+ref
+leastasfastasp1{ϵq2.Asaresult,thesequenceofsamplecomplexitiesacrossroundsgrowsgeometrically,meaning
+thecumulativesumofsamplesisalwaysdominatedbythecostofthefinalroundT.Thefullderivationisprovidedin
+AppendixC.1.
+4.2 AdaptingtoUnknownScaleσ
+Thesamplecomplexityofourmainmeanestimator,asestablishedinTheorem5,scaleswiththeratioσ{ϵ,whereσk
+is a known upper bound on the true k-th central moment σk “ Er|X ´µ|ks. This scaling is not ideal when the
+true
+providedboundishighlyconservative(i.e.,σ "σ ).Thiscontrastswiththeunquantizedsetting,wherethereexist
+true
+finite-variancemeanestimatorswhosesamplecomplexitiesscalewiththetrueratioσ {ϵwithoutrequiringanyprior
+true
+knowledgeofσ2 (LeeandValiant,2022).
+true
+Under the 1-bit communication constraint, it is difficult to learn the true scale parameter and estimate the mean
+simultaneously.Weconsiderasettingwhereboththetargetaccuracyϵandthetruescaleparameterσ areunknown
+true
+tothelearner,butthelearnerisgivenavalidbutpotentiallyvastrangeσ Prσ ,σ sandseekstoestimatethe
+true min max
+mean to a relative accuracy ϵ “ rσ for some known target ratio r P p0,1q. That is, we seek accuracy to within
+true
+multiplesofthetrue(butunknown)scaleparameter.
+To achieve this, we wrap our main estimator in a geometric grid-search procedure. The learner tests a sequence of
+logarithmicallydecayingguessesforthescaleparameterdefinedbyσ “ σ ¨2´i fori “ 0,1,...,T,wherethe
+i max
+maximumindexisgivenby
+T “rlog pσ {σ qs. (8)
+2 max min
+Foreachguessedscaleσ ,thelearnerrunsthemeanestimatorinSection2.1withparameters
+i
+ˆ ˙
+rσ δ σ
+pϵ ,δ ,λ,σ q“ i, , λ, max (9)
+i i i 6 T `1 2i
+toobtainacandidatemeanestimateµˆpiqandanassociatedconfidenceinterval
+” ı
+rσ rσ
+I “rµˆpiq˘ϵ s“ µˆpiq´ i,µˆpiq` i . (10)
+i i 6 6
+Thealgorithmproceedssequentiallyandhaltsatthefirstindexwherethenewlygeneratedconfidenceintervalfailsto
+intersectwithanyofthepreviouslyestablishedintervals:
+I XI “H forsomelďi. (11)
+i l
+Itthenoutputstheestimateµˆpi˚qfromthelastsuccessfulindexi˚ “i´1.
+Because the target accuracy scales proportionally with the guessed scale (i.e., ϵ “ rσ {6), the ratio σ {ϵ “ 6{r
+i i i i
+remainsconstantacrossallroundsi.Consequently,thesamplecomplexityoftherefinementphaseforeverygridpoint
+depends only on the relative accuracy r (and the error probability δ ). Summing the sample complexities across all
+i
+T `1gridpointsyieldsthefollowingperformanceguarantee.
+Theorem 13 (Adaptation to Unknown Scale). Given r P p0,1q and σ P rσ ,σ s, the adaptive 1-bit mean
+true min max
+estimator described above is prσ ,δq-PAC for any distribution in Dpk,λ,σ q. The total sample complexity is
+true true
+boundedby ˆ ˆ ˙ ˆ ˆ ˙ ˆ ˙˙˙
+σ logpσ {σ q λ
+n“O log σ max ¨ S k prq¨log ma δ x min `log ? σ σ
+min min max
+12
+----- PAGE 13 -----
+whereS prqcapturestheasymptoticsamplecomplexityscalingwithrespecttothefixedratior:
+k
+$
+’’’’’’’’’’&
+r
+1
+1
+2
+ˆ
+1
+˙
+ifk ą2
+log ifk “2
+S k prq“ ’’’’’’’’’’%
+ˆ
+r2
+1
+˙
+k´
+k
+1
+r
+ifk Pp1,2q.
+r
+TheproofisgiveninAppendixC.2.
+4.3 Two-StageVariant
+` ˘
+Our mean estimator in Section 2.1 uses O log λ `log1 rounds of adaptivity. Specifically, the localization step
+σ δ
+(Step 1 of Section 2.1), whi`ch performs m˘edian estimation through noisy binary search, introduces sequential
+dependencies that require O log λ `log1 rounds of adaptivity; while the refinement step requires only one
+σ δ
+additionalroundafteranintervaloflengthOpσqcontainingthemeanhasbeenidentified.
+In this section, we provide an alternative localization procedure that is non-adaptive, while leaving the subsequent
+refinement step unchanged. This yields an alternative mean estimator that requires exactly two rounds of adaptivity
+—oneforlocalizationandoneforrefinement.However,thiscomesatthecostofusinggeneral(non-interval)1-bit
+queriesinthefirstround,asopposedtousingonlythresholdqueries.
+Our alternative localization step is adapted from the localization step of the non-adaptive Gaussian mean estimator
+in(CaiandWei,2024),whichispresentedthereinforGaussiandistributionsbutalsonotedtoextendtothegeneralsub-
+Gaussiancase(unliketheirrefinementstage).Wemodifytheirlocalizationstepsothatitoperatesonalldistributions
+inDpk,λ,σq,withthefollowingperformanceguarantee:
+Theorem 14. There exists a non-adaptive 1-bit localization protocol taking pk,δ,λ,σq as input such that for each
+distribution D P Dpk,λ,σq, it returns an inte´rval
+`
+I
+˘
+containing the¯true mean µ with probability at least 1 ´ δ{2.
+Furthermore,thenumberofsamplesusedisΘ log λ ¨loglogpλ{σq andtheintervallengthis|I|“Opσq.
+σ δ
+We describe the high-level idea here. The learner partitions the search space r´λ,λs into 2M subintervals of equal
+length for some M “ Θplogpλ{σqq, and attempts to estimate all M bits of the Gray code representation of the
+subinterval containing µ.`Each o˘f these M bits is reliably estimated by making general 1-bit queries and taking a
+majorityvoteoverJ “Θ logM non-adaptivesamples,consumingMJ samplesintotal.Thedetailsaredeferredto
+δ
+AppendixD.
+Byreplacingthesequentiallocalizationstepofourmainestimatorwiththisnon-adaptivealternative,weobtainamean
+estimatorwiththefollowingperformanceguarantee.
+Corollary 15. The alternative mean estimator described above is pϵ,δq-PAC for the distribution family Dpk,λ,σq,
+withsamplecomplexity
+$ ˆ ˆ ˙˙
+ˆ ˆ ˙ ˙
+’’’’’’’’’’’&
+O
+k
+ˆ
+σ
+ϵ2
+2
+¨log
+´
+1
+δ
+¯ ˆ ˙˙
+ifk ą2
+λ logpλ{σq σ2 σ 1
+n“O log ¨log ` O ¨log ¨log ifk “2 (12)
+σ δ ’’’’’’’’’’’%O
+ˆ
+ϵ
+´
+2
+σ
+¯
+k´
+k
+1
+ϵ
+¨log
+ˆ
+1
+˙
+δ
+˙
+ifk Pp1,2q,
+k ϵ δ
+13
+----- PAGE 14 -----
+whereO p¨qrepresentsOp¨qnotationwithahiddenconstantthatdependsonk.Furthermore,theestimatorusesonly
+k
+tworoundsofadaptivity,thefirstofwhichusesgeneral(non-interval)1-bitqueries.
+4.4 MultivariateMeanEstimation
+The multivariate case (i.e., X P Rd with d ą 1) is naturally of significant interest. We have focused our analysis
+exclusively on the univariate setting up to this point, as it forms the necessary theoretical foundation and already
+presents substantial challenges when characterizing the fundamental limits of 1-bit quantization across general tail
+regimes (k ą 1). Nevertheless, our 1-bit architecture readily provides constructive, baseline guarantees for higher
+dimensions.Tomaintainclarityandisolatetheimpactofdimensionality,werestrictourdiscussioninthissubsection
+tothecanonicalfinite-variancesetting(k “2).
+Specifically, suppose that X takes values in Rd, where each coordinate X (for j “ 1,...,d) individually satisfies
+j
+ourearlierassumptionsfork “ 2;namely,aboundedmeanErX s P r´λ,λsandboundedvarianceVarpX q ď σ2.
+j ? j
+By applying our univariate estimator coordinate-wise with a refined target accuracy of ϵ{ d and a union-bounded
+?
+confidenceparameterofδ{d,weguaranteethateverycoordinateisestimatedtowithinϵ{ daccuracy.Consequently,
+weobtainanoverallmultivariateestimatethatisϵ-accurateintheℓ normwithprobabilityatleast1´δ.Inaccordance
+2
+withTheorem5,thetotalsamplecomplexityacrossalldcoordinatesis
+ˆ ˙
+r d2σ2 1 λ
+O log `dlog ,
+ϵ2 δ σ
+?
+where the d2 factor arises from (i) using the scaled accuracy parameter ϵ{ d, and (ii) running the univariate
+subroutinedtimes.Thismayseempotentiallylooseonfirstglance,duetothecorrectscalingbeing σ2 ¨pd`logp1{δqq
+ϵ2
+in the absence of a communication constraint (Lugosi and Mendelson, 2019b). However, under 1-bit feedback, the
+d2σ2{ϵ2 dependence in fact unavoidable even in the special case of Gaussian random variables; see (Cai and Wei,
+2024,Theorem8)withtheparameterm1 thereinequatington{dinournotationunder1-bitfeedback.7 Moreover,if
+thecommunicationbottleneckisrelaxedtoallowdbitsoffeedbackpersa`mple(i.e.,onebitpercoord
+˘
+inate),applying
+ourunivariateestimatorcoordinate-wiseyieldsasamplecomplexityofO r dσ2 logp1{δq`dlogpλ{σq .Intheconstant
+ϵ2
+error probability regime (δ “ Θp1q), this matches the unconstrained rate up to logarithmic factors. In the regime
+δ “ op1q there remains a significant gap due to t`he fa˘ct that dlog1 " d`log1, but this gap is inherent to any
+δ δ
+approachthatcontrolseachcoordinate’serrortoO ? ϵ separately.
+d
+Beyond the issue of joint pd,δq dependence, another limitation of the coordinate-wise approach is that it does not
+capturethedependenceonoff-diagonaltermsinthecovariancematrixΣ.Doingsomaybesignificantlymoredifficult,
+particularly when Σ is not known exactly and so “whitening” techniques cannot readily be used. We leave such
+considerationsforfuturework.
+5 Conclusion
+In this paper, we studied the fundamental limits of mean estimation under the extreme constraint of a single bit
+ofcommunicationpersample.Weproposedanoveladaptiveestimatorbasedonthresholdqueriesthatispϵ,δq-PAC
+acrossabroadfamilyofdistributions,characterizedbyaboundedmeanandaboundedk-thcentralmoment.Crucially,
+weestablishedthatourestimatorachievesorder-optimalsamplecomplexityacrossalltailregimesk ą 1.Fork ‰2,
+oursamplecomplexitymatchestheunquantizedminimaxlowerboundsalongsideanunavoidableadditivelocalization
+cost. For the finite-variance case (k “ 2), we established a novel information-theoretic lower bound proving that
+the extra multiplicative Oplogpσ{ϵqq penalty is an inescapable consequence of the 1-bit communication constraint,
+confirmingourestimator’sorder-optimalityfork “ 2(and,inturn,forallk ą 1).Wealsoexpandedtheversatility
+ofourframeworkbyprovidingalgorithmicvariantscapableofhandlinganunknownsamplingbudget,adaptingtoan
+7Togiveslightlymoredetail,theparametersmandbi “1thereinequaterespectivelytothenumberofsamplesnandnumberofbitsallowed
+perfeedback.
+14
+----- PAGE 15 -----
+unknown scale parameter given loose bounds, and using only two stages of adaptivity. To highlight the necessity of
+ouradaptiveapproach,weestablishedanadaptivitygapforboththresholdqueriesandmoregeneralintervalqueries,
+showingthatnon-adaptivestrategiesmustincurasamplecomplexitythatscaleslinearlywiththesearchsizeparameter
+λ,thusbeingconsiderablyhigherthanthelogλdependenceforouradaptiveestimators.Severaldirectionsremainfor
+future research, including achieving fully parameter-free adaptation to the scale and target accuracy with minimal
+assumptions, and extending the 1-bit quantization framework to multivariate settings beyond the coordinate-wise
+approach.
+Acknowledgement
+ThisworkwassupportedbytheSingaporeNationalResearchFoundation(NRF)underitsAIVisitingProfessorship
+programme.
+References
+Abdalla,P.andChen,J.(2026). Robustmeanestimationunderquantization. arXivpreprintarXiv:2601.07074.
+Acharya,J.,Canonne,C.,Liu,Y.,Sun,Z.,andTyagi,H.(2021a). Distributedestimationwithmultiplesamplesper
+user: Sharp rates and phase transition. In Advances in Neural Information Processing Systems, volume 34, pages
+18920–18931.
+Acharya, J., Canonne, C. L., Liu, Y., Sun, Z., and Tyagi, H. (2021b). Interactive inference under information
+constraints. IEEETransactionsonInformationTheory,68(1):502–516.
+Acharya,J.,Canonne,C.L.,Singh,A.V.,andTyagi,H.(2021c). Optimalratesfornonparametricdensityestimation
+undercommunicationconstraints. CoRR,abs/2107.10078.
+Acharya, J., Canonne, C. L., Sun, Z., and Tyagi, H. (2023). Unified lower bounds for interactive high-dimensional
+estimationunderinformationconstraints. AdvancesinNeuralInformationProcessingSystems,36:51133–51165.
+Acharya, J., Canonne, C. L., and Tyagi, H. (2020a). Inference under information constraints I: Lower bounds from
+chi-squarecontraction. IEEETransactionsonInformationTheory,66(12):7835–7855.
+Acharya, J., Canonne, C. L., and Tyagi, H. (2020b). Inference under information constraints II: communication
+constraintsandsharedrandomness. IEEETransactionsonInformationTheory,66(12):7856–7877.
+Acharya, J., Kairouz, P., Liu, Y., and Sun, Z. (2021d). Estimating sparse discrete distributions under privacy and
+communicationconstraints. InAlgorithmicLearningTheory(ALT),pages79–98.PMLR.
+Babu, N. S., Kumar, R., and Vatedka, S. (2025). Unbiased quantization of the l ball for communication-efficient
+1
+distributedmeanestimation.InInternationalConferenceonArtificialIntelligenceandStatistics(AISTATS),volume
+258,pages1270–1278.PMLR.
+Barnes, L. P., Han, Y., and O¨zgu¨r, A. (2019). Fisher information for distributed estimation under a blackboard
+communicationprotocol.InIEEEInternationalSymposiumonInformationTheory(ISIT),pages2704–2708.IEEE.
+Barnes,L.P.,Han,Y.,andO¨zgu¨r,A.(2020).Lowerboundsforlearningdistributionsundercommunicationconstraints
+viaFisherinformation. JournalofMachineLearningResearch,21:1–30.
+Ben-Basat, R., Vargaftik, S., Portnoy, A., Einziger, G., Ben-Itzhak, Y., and Mitzenmacher, M. (2024). Accelerating
+federated learning with quick distributed mean estimation. In International Conference on Machine Learning
+(ICML),volume235,pages3410–3442.PMLR.
+15
+----- PAGE 16 -----
+Braverman, M., Garg, A., Ma, T., Nguyen, H. L., and Woodruff, D. P. (2016). Communication lower bounds for
+statisticalestimationproblemsviaadistributeddataprocessinginequality. InSymposiumonTheoryofComputing
+Conference,STOC’16,pages1011–1020.ACM.
+Bubeck, S., Cesa-Bianchi, N., and Lugosi, G. (2013). Bandits with heavy tail. IEEE Transactions on Information
+Theory,59(11):7711–7717.
+Cai, T. T. and Wei, H. (2022a). Distributed adaptive Gaussian mean estimation with unknown variance: Interactive
+protocolhelpsadaptation. TheAnnalsofStatistics,50(4):1992–2020.
+Cai,T.T.andWei,H.(2022b). Distributednonparametricfunctionestimation:Optimalrateofconvergenceandcost
+ofadaptation. TheAnnalsofStatistics,50(2):698–725.
+Cai,T.T.andWei,H.(2024). DistributedGaussianmeanestimationundercommunicationconstraints:Optimalrates
+andcommunication-efficientalgorithms. JournalofMachineLearningResearch,25(37):1–63.
+Cherapanamjeri,Y.,Tripuraneni,N.,Bartlett,P.,andJordan,M.(2022). Optimalmeanestimationwithoutavariance.
+InConferenceonLearningTheory,pages356–357.PMLR.
+Dang,T.,Lee,J.,Song,M.,andValiant,P.(2023). Optimalityinmeanestimation:Beyondworst-case,beyondsub-
+Gaussian,andbeyond1`αmoments. InAdvancesinNeuralInformationProcessingSystems,volume36,pages
+4150–4176.
+Davies,P.,Gurunanthan,V.,Moshrefi,N.,Ashkboos,S.,andAlistarh,D.(2021). Newboundsfordistributedmean
+estimationandvariancereduction. InInternationalConferenceonLearningRepresentations,(ICLR).
+DeGroot, M. and Schervish, M. (2013). Probability and Statistics: Pearson New International Edition. Pearson
+Education.
+Devroye, L., Lerasle, M., Lugosi, G., and Oliveira, R. I. (2016). Sub-Gaussian mean estimators. The Annals of
+Statistics,44(6):2695–2725.
+Garg, A., Ma, T., and Nguyen, H. L. (2014). On communication cost of distributed statistical estimation and
+dimensionality. InAdvancesinNeuralInformationProcessingSystems27,pages2726–2734.
+Gretta, L. and Price, E. (2024). Sharp Noisy Binary Search with Monotonic Probabilities. In 51st International
+ColloquiumonAutomata,Languages,andProgramming(ICALP),volume297,pages75:1–75:19.
+Gupta,S.,Hopkins,S.,andPrice,E.(2024).Beyondcatoni:Sharperratesforheavy-tailedandrobustmeanestimation.
+InConferenceonLearningTheory(COLT),pages2232–2269.PMLR.
+Han,Y.,Mukherjee,P.,O¨zgu¨r,A.,andWeissman,T.(2018a). Distributedstatisticalestimationofhigh-dimensional
+andnon-parametricdistributions. InIEEEInternationalSymposiumonInformationTheory(ISIT),pages506–510.
+Han, Y., O¨zgu¨r, A., and Weissman, T. (2018b). Geometric lower bounds for distributed parameter estimation under
+communicationconstraints. InConferenceonLearningTheory(COLT),volume75,pages3163–3188.PMLR.
+Hanna,O.A.,Yang,L.,andFragouli,C.(2022). SolvingMulti-ArmBanditUsingaFewBitsofCommunication. In
+InternationalConferenceonArtificialIntelligenceandStatistics(AISTATS),pages11215–11236.
+He,S.,Shin,H.-S.,Xu,S.,andTsourdos,A.(2020). Distributedestimationoveralow-costsensornetwork:Areview
+ofstate-of-the-art. InformationFusion,54:21–43.
+Kipnis,A.andDuchi,J.C.(2022). Meanestimationfromone-bitmeasurements. IEEETransactionsonInformation
+Theory,68(9):6276–6296.
+Kleinberg,R.andLeighton,T.(2003).Thevalueofknowingademandcurve:Boundsonregretforonlineposted-price
+auctions. InIEEESymposiumonFoundationsofComputerScience(FOCS),pages594–605.IEEE.
+Konecˇny`, J. and Richta´rik, P. (2018). Randomized distributed mean estimation: Accuracy vs. communication.
+FrontiersinAppliedMathematicsandStatistics,4:62.
+16
+----- PAGE 17 -----
+Kumar, R. and Vatedka, S. (2025). One-bit distributed mean estimation with unknown variance. arXiv preprint
+arXiv:2501.18502.
+Lau,I.andScarlett,J.(2025a). Quantilemulti-armedbanditswith1-bitfeedback. InAlgorithmicLearningTheory,
+pages664–699.PMLR.
+Lau,I.andScarlett,J.(2025b). Sequential1-bitmeanestimationwithnear-optimalsamplecomplexity. arXivpreprint
+arXiv:2509.21940.
+Lee, J. (2020). CSCI 1951-W Sublinear Algorithms for Big Data, Lecture 11. https://cs.brown.edu/
+courses/csci1951-w/lec/lec%2011%20notes.pdf. Accessed:2025-07-01.
+Lee, J. C. and Valiant, P. (2022). Optimal sub-Gaussian mean estimation in R. In IEEE Annual Symposium on
+FoundationsofComputerScience(FOCS),pages672–683.IEEE.
+Lugosi, G. and Mendelson, S. (2019a). Mean estimation and regression under heavy-tailed distributions: A survey.
+FoundationsofComputationalMathematics,19(5):1145–1190.
+Lugosi, G. and Mendelson, S. (2019b). Sub-Gaussian estimators of the mean of a random vector. The Annals of
+Statistics,47(2):783–794.
+Luo,Z.-Q.(2005). Universaldecentralizedestimationinabandwidthconstrainedsensornetwork. IEEETransactions
+onInformationTheory,51(6):2210–2219.
+Mayekar,P.,Scarlett,J.,andTan,V.Y.(2023). Communication-constrainedbanditsunderadditiveGaussiannoise. In
+InternationalConferenceonMachineLearning(ICML),pages24236–24250.
+Mayekar, P., Suresh, A. T., and Tyagi, H. (2021). Wyner-ziv estimators: Efficient distributed mean estimation with
+side-information.InInternationalConferenceonArtificialIntelligenceandStatistics(AISTATS),pages3502–3510.
+PMLR.
+Minsker, S.(2023). Efficient median of means estimator. In Conferenceon Learning Theory(COLT), pages 5925–
+5933.PMLR.
+Paes Leme, R., Sivan, B., Teng, Y., and Worah, P. (2023). Pricing query complexity of revenue maximization. In
+ACM-SIAMSymposiumonDiscreteAlgorithms(SODA),pages399–415.SIAM.
+Polyanskiy,Y.andWu,Y.(2025). InformationTheory:FromCodingtoLearning. CambridgeUniversityPress.
+Ribeiro,A.andGiannakis,G.B.(2006a). Bandwidth-constraineddistributedestimationforwirelesssensornetworks-
+parti:Gaussiancase. IEEETransactionsonSignalProcessing,54(3):1131–1143.
+Ribeiro,A.andGiannakis,G.B.(2006b).Bandwidth-constraineddistributedestimationforwirelesssensornetworks-
+partii:Unknownprobabilitydensityfunction. IEEETransactionsonSignalProcessing,54(7):2784–2796.
+Shah, J., Cardone, M., Rush, C., and Dytso, A. (2025). Generalized linear models with 1-bit measurements:
+Asymptotics of the maximum likelihood estimator. In International Conference on Acoustics, Speech and Signal
+Processing(ICASSP),pages1–5.IEEE.
+Shamir,O.(2014). Fundamentallimitsofonlineanddistributedalgorithmsforstatisticallearningandestimation. In
+AdvancesinNeuralInformationProcessingSystems27,pages163–171.
+Suresh, A. T., Felix, X. Y., Kumar, S., and McMahan, H. B. (2017). Distributed mean estimation with limited
+communication. InInternationalConferenceonMachineLearning(ICML),pages3329–3337.PMLR.
+Suresh, A. T., Sun, Z., Ro, J., and Yu, F. (2022). Correlated quantization for distributed mean estimation and
+optimization. InInternationalConferenceonMachineLearning,pages20856–20876.PMLR.
+Szabo´,B.andvanZanten,H.(2018). Adaptivedistributedmethodsundercommunicationconstraints. TheAnnalsof
+Statistics.
+17
+----- PAGE 18 -----
+Szabo´, B. and van Zanten, H. (2020). Distributed function estimation: Adaptation using minimal communication.
+MathematicalStatisticsandLearning.
+Tsybakov,A.B.(2009). IntroductiontoNonparametricEstimation. SpringerSeriesinStatistics.
+Vargaftik, S., Basat, R. B., Portnoy, A., Mendelson, G., Itzhak, Y. B., and Mitzenmacher, M. (2022). EDEN:
+Communication-efficientandrobustdistributedmeanestimationforfederatedlearning.InInternationalConference
+onMachineLearning(ICML),volume162,pages21984–22014.PMLR.
+Vargaftik,S.,Ben-Basat,R.,Portnoy,A.,Mendelson,G.,Ben-Itzhak,Y.,andMitzenmacher,M.(2021).Drive:One-bit
+distributedmeanestimation. InAdvancesinNeuralInformationProcessingSystems,volume34,pages362–377.
+Varshney,P.K.(2012). Distributeddetectionanddatafusion. SpringerScience&BusinessMedia.
+Veeravalli, V. V. and Varshney, P. K. (2012). Distributed inference in wireless sensor networks. Philosophical
+TransactionsoftheRoyalSocietyA:Mathematical,PhysicalandEngineeringSciences,370(1958):100–117.
+Xiao,J.-J.,Ribeiro,A.,Luo,Z.-Q.,andGiannakis,G.B.(2006). Distributedcompression-estimationusingwireless
+sensornetworks. IEEESignalProcessingMagazine,23(4):27–41.
+Xu,A.andRaginsky,M.(2017). Information-theoreticlowerboundsonBayesriskindecentralizedestimation. IEEE
+TransactionsonInformationTheory,63(3):1580–1600.
+Zaman, A. and Szabo´, B. (2022). Distributed nonparametric estimation under communication constraints. arXiv
+preprintarXiv:2204.10373.
+Zhang,Y.,Duchi,J.,Jordan,M.I.,andWainwright,M.J.(2013). Information-theoreticlowerboundsfordistributed
+statisticalestimationwithcommunicationconstraints. InAdvancesinNeuralInformationProcessingSystems26,
+pages2328–2336.
+Zhu, Y. and Lafferty, J. (2018). Distributed nonparametric regression under communication constraints. In
+InternationalConferenceonMachineLearning(ICML),pages6009–6017.PMLR.
+18
+----- PAGE 19 -----
+Appendix
+A Proof of Theorem 5 (Performance Guarantee of 1-bit Mean Estimator)
+WefirststateausefulgeneralizationofChebyshev’sinequalitythatwillbeusedmultipletimesintheproof.
+Lemma16(k-momentChebyshev’sIn“equality).‰SupposethattherandomvariableXhasafinitek-thcentralmoment
+boundedbyσk forsomek ą1,i.e.,E |X´µ|k ďσk.Then,foreachtą0,wehave
+“ ‰
+` ˘ E |X´µ|k σk
+Prp|X´µ|ětq“Pr |X´µ|k ětk ď ď (13)
+tk tk
+WeproceedinseveralstepsasweoutlinedinSection2.1.
+Step 1 (Narrowing Down the Mean via the Median): We discretize the interval r´λ,λs containing ErXs into a
+discretesetofpointswithuniformspacingofσ:8
+t´λ,´λ`σ,...,´σ,0,σ,...,λ´σ,λu.
+WethenformestimatesL,U P t´λ,´λ`σ,...,λ´σ,λuusingnoisybinarysearch(GrettaandPrice,2024)that
+satisfy
+` ˘
+δ
+Pr FpLqă0.5andFpL`σqą0.49 ě1´ (14)
+4
+and
+` ˘
+δ
+Pr FpU ´σqă0.51andFpUqą0.5 ě1´ . (15)
+4
+` ˘
+The algorithm in (Gretta and Price, 2024) achieves this using at most O log λ 1-bit queries. Under these high-
+σδ
+probability events, the median M satisfies L ď M ď U. Using the well-known fact that the median minimizes the
+meanabsoluteerror(DeGrootandSchervish,2013,Theorem4.5.3):
+E|X´M|ďE|X´d| foreachdPR,
+wehave
+|µ´M|“|ErXs´M|“|ErX´Ms|ďE|X´M|ďE|X´µ|.
+Meanwhile, applying Jensen’s inequality to the convex function z ÞÑ |z|k (for k ą 1), along with the k-th central
+momentbound,yields “ ‰
+pEr|X´µ|sq k ďE |X´µ|k ďσk ùñ E|X´µ|ďσ.
+CombiningthesetwofindingsandLďM ďU,wehave
+|µ´M|ďσ ùñ µPrL´σ,U `σs.
+Next,weboundthelengthofthislocalizedinterval,pU `σq´pL´σq.Weconsidertwocases:(i)L`σ ě U ´σ
+and(ii)L`σ ă U ´σ.Incase(i),theintervallengthistriviallyatmost4σ.Incase(ii),weclaimthattheinterval
+lengthisatmost8σ.Seekingcontradiction,supposethelengthofintervalpU `σq´pL´σq ě 9σ.Thenwemust
+haveeither
+µ´pL´σqě4.5σ or pU `σq´µě4.5σ.
+We will show that µ´pL´σq ě 4.5σ (which implies µ´2.5σ ě L`σ) will lead to a contradiction; the case
+pU `σq´µě4.5σissimilar.Using(14),wehave
+PrpX ďµ´2.5σqěPrpX ďL`σq“F pL`σqą0.49.
+X
+8Foreaseofanalysis,weassumethatλisanintegermultipleofσ.
+19
+----- PAGE 20 -----
+Ontheotherhand,bythe“k-moment”Chebyshev’sinequality(13),wehave
+1 1
+PrpX ďµ´2.5σqďPrp|X´µ|ě2.5σqď ă ă0.49,
+2.5k 2.5
+whichisacontradiction.Therefore,wehaveshownthatwithprobabilityatleast1´δ{2,themeanµliesinaninterval
+oflengthatmost8σ.
+Step2(CutoffThresholdSelection):LetTptq:“|ErX¨1p|X|ątqs|denotethecontributionfromtheinsignificant
+regionforathresholdtą8σ.UsingthedecompositionX “pX´µq`µandthetriangleinequality,wehave:
+ˇ ˇ
+Tptqď|ErpX´µq¨1p|X|ątqs|`|µ¨Er1p|X|ątqs|ďEr|X´µ|¨1p|X|ątqs` ˇ µ ˇ ¨Prp|X|ątq. (16)
+RecallfromStep1thatourcenteringguarantees|µ|ď4σ.Sincetą8σ,itfollowsthatt´|µ|ět{2ą0.Usingthe
+reversetriangleinequalityontheevent|X|ąt,weobserve:
+ˆ ˙
+|X´µ| k´1 |X´µ|k
+tă|X| ùñ t´|µ|ă|X|´|µ|ď|X´µ| ùñ 1ă ùñ |X´µ|ă .
+t´|µ| pt´|µ|q k´1
+Substituting this bound into (16), and applying both the k-th central bound and the k-moment Chebyshev’s
+inequality(13),weobtain:
+Er|X´µ|ks σk ˇ
+ˇ
+ˇ
+ˇ
+σk
+Tptqď `|µ|¨Prp|X´µ|ąt´|µ|qď ` µ ¨ .
+pt´|µ|q k´1 pt´|µ|q k´1 pt´|µ|q k
+Becauset´|µ|“Θptqand|µ|“Opσqduetoourcenteringstep,thefirsttermdominates,yielding
+ˆ ˙
+σk
+Tptq“O .
+tk´1
+Toensurethetailcontributionisatmostϵ{2,itissufficienttoset
+ˆ ˙ ´ ¯ ˆ ´ ¯ ˙
+t k´1 σ σ 1{pk´1q
+“Θ ùñ t“Θ σ¨ .
+σ ϵ ϵ
+Itremainstoformafinalhigh-probabilityestimateµˆofthe“clippedmean”ErX¨1p|X|ďtqssatisfying
+|µˆ´ErX¨1p|X|ďtqs|ďϵ{2,
+asthisimplies ˇ ˇ
+ˇ ˇ
+|µ´µˆ|“ˇErX¨1p|X|ątqs`ErX¨1p|X|ďtqs´µˆˇ
+ˇ ˇ ˇ ˇ
+ˇ ˇ ˇ ˇ
+ďˇErX¨1p|X|ątqsˇ`ˇErX¨1p|X|ďtqs´µˆˇ (17)
+ϵ ϵ
+ď ` ďϵ.
+2 2
+Step3(SignificantRegionPartitioning).AsoutlinedinSection2.1,wepartitionthesignificantregionr´t,tsinto
+symmetricsub-regions.Foriě1,wedefinetheright-sidedregionsasR “σrm ,m qwherem “0andm “2i.
+i i´1 i 0 i
+Theleft-sidedregionsareformedbysymmetry:R “´R .
+´i i
+Toensuretheunionofthesepartitionedregionsfullycoversthetargetintervalr´t,ts,themaximumindexi must
+` ˘ max
+satisfym imax σ ět.RecallingfromStep2thatt“Θ σ¨pσ{ϵqk´ 1 1 ,weseti max tobetheminimumintegersatisfying
+thiscondition: R ˆ ˙V ˆ ´ ¯˙
+t 1 σ
+i “ log “Θ log .
+max 2 σ k´1 ϵ
+Let t1 “ m σ “ Θptq denote the effective cutoff threshold. Because t1 ě t, expanding the truncation window
+imax
+fromr´t,tstor´t1,t1scanonlydecreasethetruncationbias,meaningthetailmassboundofϵ{2establishedinStep2
+20
+----- PAGE 21 -----
+remainsvalid.Furthermore,sincetheregionsaredisjoint,theclippedmeandecomposesintothesumofthelocalmean
+contributions: ÿ ÿ
+µ “ ErX¨1pX PR qs“ErX¨1p|X|ďt1qs.
+i i
+|i|ďimax |i|ďimax
+Therefore,toestimatetheoverallclippedmean,itissufficienttoindependentlyestimatethelocalmeancontributionµ
+i
+ofeachregionR .
+i
+Step4(Region-WiseRandomizedThresholdQueries):Foreachi,writeR “ra ,b q,andletT „Unifpa ,b qbe
+i i i i i i
+arandomthresholdindependentofX.ToformallyjustifythelocalmeanidentityintroducedinStep4ofSection2.1,
+we define a (hypothetical) stochastic quantizer SQ pXq that rounds X to the boundaries of R if X falls within the
+i i
+region,andoutputs0otherwise: $
+’&a ifX PR andX ďT
+i i i
+SQ pXq“ b ifX PR andX ąT
+i ’% i i i
+0 ifX RR .
+i
+Bythisdirectconstruction,theprobabilityofoutputtinga (respectively,b )preciselymatchestheauxiliaryprobability
+i i
+p (respectively,p )definedin(2)(respectively,(3)).Specifically,wehave:
+ai bi
+p “PrpX ěa q´PrpX ěT q“PrpX Pra ,T sq“PrpX PR andX ďT q“PrpSQ pXq“a q.
+ai i i i i i i i i
+Likewise,analogousstepsyield
+p “PrpX PR andX ąT q“PrpSQ pXq“b q.
+bi i i i i
+These equivalences allow us to interpret our threshold queries as a form of binary stochastic quantization. A well-
+known property of a stochastic quantizer is that it “rounds” X in a way that preserves its value in expectation. To
+formallyshowthis,weevaluatetheconditionalexpectationofSQ pXqgivenX “ x.UsingtheCDFoftheuniform
+i
+distributionT ,weobservethefollowing:
+i
+• IfxRR ,thenSQ pxq“0,whichtriviallygivesErSQ pXq|X “xs“0.
+i i i ´ ¯ ´ ¯
+• IfxPR i ,theconditionalexpectationsimplifiestoErSQ i pXq|X “xs“a i b b i i ´ ´ a x i `b i b x i ´ ´ a a i i “x.
+Usinganindicatorfunction,wecanexpressthisconditionalexpectationcompactlyforallX:
+ErSQ pXq|Xs“X¨1pX PR q.
+i i
+Combiningtheabovefindingsandapplyingthelawoftotalexpectationyieldsthekeyidentity:
+µ “ErX¨1pX PR qs“ErErSQ pXq|Xss“ErSQ pXqs“a ¨p `b ¨p .
+i i i i i ai i bi
+It follows that to estimate the true local mean contribution µ , it is sufficient to estimate p and p . To do this,
+i ai bi
+the learner forms unbiased estimates pˆ and pˆ using the empirical averages of randomized threshold queries.
+ai bi
+Specifically,theestimationprocedureforp operatesasfollows:
+ai
+1. Asktheagentn thresholdqueries“IsX ě a ?”forj “ 1,...,n ,wheren istheregionalsamplebudget
+i i,j i i i
+determinedinStep5.
+2. GenerateindependentrandomvariablesT „Unifpa ,b qforj “n `1,...,2n .
+i,j i i i i
+3. Asktheagentn randomizedthresholdqueries“IsX ěT ?”forj “n `1,...,2n .
+i i,j i,j i i
+4. Computetheempiricalaveragesbasedonthe1-bitfeedbackandperformthesubtractionaccordingto(2).
+The learner forms the corresponding estimate pˆ using an analogous procedure, utilizing 2n fresh samples with
+bi i
+queries“IsX ďb ?”and“IsX ďT ?”.Wesummarizetheempiricalestimatesas
+i,j i i,j i,j
+˜ ¸ ˜ ¸
+1
+ÿni
+1
+2ÿni
+pˆ “ 1pX ěa q ´ 1pX ěT q (18)
+ai n i,j i n i,j i,j
+i j“1 i j“ni`1
+21
+----- PAGE 22 -----
+and ˜ ¸ ˜ ¸
+1
+3ÿni
+1
+4ÿni
+pˆ “ 1pX ďb q ´ 1pX ďT q . (19)
+bi n i,j i n i,j i,j
+i j“2ni`1 i j“3ni`1
+Thisprocedureconsumesexactly4n independentsamplesperregionR .Becausetheregionboundariesa andb are
+i i i i
+explicitlyfixedafterStep3,thedatacollectionforallempiricalpairstppˆ ,pˆ qu canbeexecutedentirelyina
+ai bi |i|ďimax
+non-adaptive,parallelmanner.Combiningtheempiricalaveragesusingµˆ “ a pˆ `b pˆ yieldsthefinalunbiased
+i i ai i bi
+localestimate.
+ř
+Step5(BaseEstimatorandSampleAllocation):Letthebaseestimatorµˆ “ µˆ bethesumofthelocal
+base |i|ďimax i
+estimates.Toguaranteethatthemedian-of-meanswrapperinStep6succeeds,thebaseestimatorµˆ mustachieve
+base
+anestimationerrorofatmostϵ{2withafailureprobabilitystrictlylessthan1{2(e.g.,ď1{4).
+ř
+Sinceµˆ isanunbiasedestimatoroftheclippedmean,i.e.,Erµˆ s“ µ ,applyingChebyshev’sinequality
+base base |i|ďimax i
+yields ¨ˇ ˇ ˛
+ˇ ˇ
+ˇ ÿ ˇ ´ ¯
+Pr ˝ˇ ˇ ˇ µˆ base ´ µ i ˇ ˇ ˇ ě 2 ϵ‚ “Pr |µˆ base ´Erµˆ base s|ě 2 ϵ ď Va p r ϵ p { µˆ 2 b q a 2 se q “ 4Var ϵ p 2 µˆ base q . (20)
+|i|ďimax
+Therefore,itissufficienttoenforcetheglobalvarianceconstraintVarpµˆ qďϵ2{16.Becausethelocalestimatesare
+base
+constructedfromindependentrandomthresholdqueries,thevarianceofthebaseestimatordecomposesasthesumof
+thelocalvariances: ¨ ˛
+ÿ ÿ
+˝ ‚
+Varpµˆ q“Var µˆ “ Varpµˆ q.
+base i i
+|i|ďimax |i|ďimax
+We analyze this in three substeps: 5(a) bounding the local variance via tail probabilities, 5(b) constructing sample
+allocation to satisfy the global variance constraint, and 5(c) evaluating the final sample complexity across the tail
+regimes.
+Substep5(a):LocalVarianceBounds.Bythesymmetryofthepartitionconstruction(R “ ´R ),wecanassume
+´i i
+iě1(therighttail)withoutlossofgenerality;anidenticalargumentappliestothelefttail.RecallthatR “ra ,b q“
+i i i
+σ¨rm ,m q,wherem “0andm “2i.Sinceµˆ “a ¨pˆ `b ¨pˆ ,thelocalvariancedecomposesas
+i´1 i 0 i i i ai i bi
+Varpµˆ q“a2¨Varppˆ q`b2¨Varppˆ qďm2¨σ2¨pVarppˆ q`Varppˆ qq.
+i i ai i bi i ai bi
+Weboundthevarianceofeachprobabilityestimate.Usingthedefinitionofpˆ (see(18))andthefactthatthequeries
+ai
+withineachempiricalaveragearei.i.d.(i.e.,X „X andT „T ),wehave
+j ij i
+` `
+1 1
+Varppˆ q“ ¨Varp1 X ěa qq` ¨Varp1 X ěT qq
+ai n i n i
+i i
+1 1
+ď ¨PrpX ěa q` ¨PrpX ěT q
+n i n i
+i i
+2
+ď ¨PrpX ěa q,
+n i
+i
+wherethefirstinequalityfollowsfromtheBernoullivariancepropertyVarpBerppqq “ pp1´pq ď p,andthesecond
+inequalityfollowsbecauseT ěa .AnidenticalargumentbutwithVarpBerppqq“pp1´pqď1´pyields
+i i
+1 1 2
+Varppˆ qď ¨PrpX ěb q` ¨PrpX ěT qď ¨PrpX ěa q.
+bi n i n i n i
+i i i
+ř
+Letp :“ PrpX P R q.Usingthis,thetailprobabilitycanbeexpressedasPrpX ě a q “ 8 p .Substitutingthis
+j j i j“i j
+intothelocalvarianceyieldsthefollowingbound:
+4¨m2¨σ2
+ÿ8
+Varpµˆ qď i p . (21)
+i n j
+i j“i
+22
+----- PAGE 23 -----
+Substep5(b):SampleAllocationandGlobalVarianceVerification.Summingoveralli regionsoftherighttailand
+max
+swappingtheorderofsummation(whichisjustifiedbythenon-negativityofargumentsandTonelli’stheorem)gives
+¨ ˛
+iÿ
+max Varpµˆ qď
+iÿ
+max 4¨m2 i ¨σ2
+ÿ8
+p “
+ÿ8
+p ¨ ˝
+minpÿj,imaxq
+4¨m2 i ¨σ2 ‚ . (22)
+i n j j n
+i“1 i“1 i j“i j“1 i“1 i
+RecallfromStep1thattheshiftedmeanisboundedby|µ|ď4σ.Furthermore,theregionboundariessatisfya ą4σ
+j
+ifandonlyifj ě 4.Basedontheseobservations,wesplittheoutersumof(22)intothetwocases:(i)j ď 3and(ii)
+j ě4.Forj ď3,usingthetrivialboundp ď1,theircontributiontotheglobalvarianceisatmost
+j
+¨ ˛
+ˆ ˙
+ÿ3
+p ¨ ˝
+minpÿj,imaxq
+4¨m2
+i
+¨σ2
+‚ “O
+σ2
+. (23)
+j n min n
+j“1 i“1 i iď3 i
+We now consider j ě 4. If X P R , then X ě m σ “ 2j´1σ. Applying the triangle inequality and exploiting
+j j´1
+|µ|ď4σyields
+X PR ùñ |X´µ|ěX´|µ|ěp2j´1´4q¨σ ě2j´2¨σ “m σ ùñ |X´µ|k ěpm σqk.
+j j´2 j´2
+Multiplyingbytheindicator1tX PR uandtakingtheexpectationacrossallj ě4connectstheregionprobabilities
+j
+tothek-thcentralmomentbound:
+ÿ8 ÿ8 “ ‰ ÿ8
+p ¨pm σqk “ pm σqk¨E 1tX PR u ď Er|X´µ|k1tX PR usďEr|X´µ|ksďσk.
+j j´2 j´2 j j
+j“4 j“4 j“4
+Dividingbyσk andnotingthatmk “2kpj´2q “2jk{22k,thissimplifiesto
+j´2
+ÿ8
+p ¨2jk ď22k “Op1q, (24)
+j
+j“4
+wheretheOp1qboundfollowsdirectlyfromRemark3,asweassumek ď 3withoutlossofgenerality.Wepropose
+settingthelocalsampleallocationtoscaleas
+ˆ ˙
+σ2
+n “Θ ¨2ip2´kq .
+i ϵ2
+Underthisallocation,theinnergeometricsumof(22)isupperboundedbythefollowing(extendingthehighestindex
+fromminpj,i qtoj forsimplicity):
+max
+˜ ¸
+ÿj 4¨m2¨σ2 ÿj ` ˘
+i “O ϵ2 2ik “O ϵ2¨2jk . (25)
+n
+i“1 i i“1
+Substitutingthisintotheoutersumof(22)forj ě4andcombiningwith(24)(aswellas(23))yields:
+˜ ¸
+iÿ
+max
+ÿ8
+Varpµˆ qďOpϵ2q`O ϵ2 p ¨2jk “Opϵ2q.
+i j
+i“1 j“4
+Byscalingthesampleallocationwithasufficientlylargeabsoluteconstant,itfollowsthatthebaseestimatorsatisfies
+theglobalvarianceconstraintVarpµˆ qďϵ2{16.
+base
+Substep5(c):TotalSampleComplexity.Thesamplecomplexityforasinglebaseestimatorisgivenbythesumofthe
+regionalsampleallocations:
+¨ ˛
+˚ ˜ ¸‹
+ÿ n i “2 iÿ max n i “Θ ˚ ˚ ˚ ˝ σ ϵ2 2 ¨ iÿ max 2ip2´kq ‹ ‹ ‹ ‚
+|i|ďimax i“1 looio“oo1oomooooooon
+Sk
+Toestablishexplicitasymptoticbounds,weevaluatethegeometricseriesS acrossthreedistincttailregimes:
+k
+23
+----- PAGE 24 -----
+1. Light-taileddistributions(k ą2):Becausetheexponent2´kisstrictlynegative,S isaconvergentgeometric
+k
+seriesboundedby
+22´kp1´2p2´kq¨imaxq 22´k 1
+S “ ď “ .
+k 1´22´k 1´22´k 2k´2´1
+Ask Ñ`2`,th˘edenominator2k´2´1“Θpln2¨pk´2qq“Θpk´2qbyaTaylorseriesexpansion.Therefore,
+S “Θ 1 ,andthesamplecomplexityisboundedby
+k k´2
+ˆ ˙
+ÿ
+σ2 1
+n “O ¨ .
+i ϵ2 k´2
+|i|ďimax
+´ ! )¯
+Notethatifwedroptheassumptionk ě3fromRemark8,thenthisgeneralizestoO σ2 ¨max 1, 1 ,i.e.,
+ϵ2 k´2
+thefactor 1 ishighlyrelevantask Ñ2`butnotask Ñ8.
+k´2
+2. Finite-variancedistributions(k “2):Becausetheexponent2´kisexactlyzero,S triviallyevaluatesto
+k
+iÿ
+max
+´
+σ
+¯
+S “ 1“i “Θ log .
+k max ϵ
+j“1
+Thesamplecomplexityisthereforeboundedby
+ÿ ˆ ´ ¯˙
+σ2 σ
+n “O ¨log .
+i ϵ2 ϵ
+|i|ďimax
+3. Heavy-tailed distributions (k P p1,2q): Because the exponent 2 ´ k is strictly positive, S is a growing
+k
+geometricseriesdominatedbyitsfinalterm:
+ˆ ˙
+22´kp2imaxp2´kq´1q 2imaxp2´kq
+S “ “Θ .
+k 22´k´1 22´k´1
+As k Ñ 2´, thedenominator 22´k ´1 “ Θpln2p2´kqq “ Θp2´kqby aTaylor series expansion. Forthe
+numerator,werecallfromSteps2and3that2imaxσ “Θptq“Θpσ¨pσ{ϵq1{pk´1qq,whichyields
+ˆ´ ¯ ˙
+σ 2´k
+2imaxp2´kq “p2imaxq2´k “Θ k´1 .
+ϵ
+SubstitutingtheseboundsintoS gives
+k
+ˆ´ ¯ ˙
+σ 2´k 1
+S “Θ k´1 ¨ .
+k ϵ 2´k
+Thesamplecomplexityisthereforeboundedby
+ÿ ˆ ´ ¯ ˙ ˆ´ ¯ ˙
+σ2 σ 2´k 1 σ k 1
+n “O ¨ k´1 ¨ “O k´1 ¨ .
+i ϵ2 ϵ 2´k ϵ 2´k
+|i|ďimax
+Step6(Median-of-Means):Whilethebaseestimatorµˆ satisfiesthetargetglobalvarianceconstraint,itachieves
+base
+ϵ-accuracy with only constant probability. We boost this success probability using the median-of-means framework.
+ThealgorithmrepeatsthebaseestimationindependentlyK “ r8logp2{δqstimestoobtainµˆp1q,...,µˆpKq andtakes
+base base
+theirmedianasthefinalestimate: ´ ¯
+µˆ “median µˆp1q,...,µˆpKq .
+base base
+Fork “1,...,K,letY betheindicatorvariableforthefailureeventofthek-thbatch:
+k
+¨ˇ ˇ ˛
+ˇ ˇ
+ˇ ÿ ˇ
+Y k “1 ˝ˇ ˇ ˇ µˆp b k as q e ´ µ i ˇ ˇ ˇ ą 2 ϵ‚ ,
+|i|ďimax
+24
+----- PAGE 25 -----
+ř
+and let S “ K Y denote the total number of failures. By Chebyshev’s inequality (as shown in (20)) and our
+k“1 k
+varianceboundVarpµˆ qďϵ2{16establishedinStep5,thevariablesY ,...,Y arei.i.d.Bernoullirandomvariables
+base 1 K
+withPrpY “1qď1{4.ThisimpliesErSsďK{4.
+k
+Ifthefinalmedianestimateµˆdeviatesfromtheclippedmeanbymorethanϵ{2,itmustbethecasethatatleasthalfof
+theindividualbaseestimatesfailed(i.e.,S ěK{2).Therefore,applyingHoeffding’sinequalityyields
+¨ˇ ˇ ˛
+ˇ ˇ ˆ ˙ ˆ ˙ ˆ ˙
+ˇ ÿ ˇ
+Pr ˝ˇ ˇ ˇ µˆ´ µ i ˇ ˇ ˇ ą 2 ϵ‚ ďPr S ě K 2 ďPr S´ErSsě K 4 ďexp ´ K 8 ď 2 δ .
+|i|ďimax
+ˇ ˇ
+ˇř ˇ
+Finally, we recall the deterministic truncation error bound ˇ µ ´µˇ ď ϵ{2 established in Step 2. By the
+ˇ
+ˇ ř
+ˇ
+ˇ
+|i|ďimax i
+triangleinequality,theconditionˇµˆ´ µ ˇ ď ϵ{2impliesthefinalestimatesatisfies|µˆ´µ| ď ϵ.Takingthe
+|i|ďimax i
+unionboundoverthelocalizationfailureprobability(ďδ{2fromStep1)andthemedian-of-meansfailureprobability
+(ďδ{2),theestimatorachievesthetargetaccuracywithprobabilityatleast1´δ.Thisconcludestheproof.
+B Lower Bounds and Adaptivity Gap
+B.1 ProofofTheorem9(MatchingLowerBound)
+Theorem9establishesalowerboundthatdecomposesintotwocomponents:atail-dependentbasecomplexity,anda
+tail-independentadditivelocalizationcost.Weprovethesecomponentsseparately.
+Part1:Tail-DependentBaseComplexities
+Intheasbenceofcommunicationconstraints,theminimaxsamplecomplexityboundsforunquantizedmeanestimation
+arewellknown: $ ˆ ˆ ˙˙
+’’’’&
+Ω
+σ
+ϵ2
+2
+¨log
+1
+δ
+ifk ě2
+n“
+’’’’%
+Ω
+ˆ´
+σ
+¯
+k´
+k
+1 ¨log
+ˆ
+1
+˙˙
+ifk Pp1,2q.
+ϵ δ
+Forinstance,thesecanbederivedviaareductiontodistinguishingtwoBernoullidistributionsfork ě 2(Lee,2020,
+Section4),andtwoscaledBernoullidistributionsfork Pp1,2q(Devroyeetal.,2016,Section4.3).
+However,theseunquantizedlowerboundsareinsufficienttoverifythestrictoptimalityofourestimatorforthefinite-
+variance case (k “ 2), as our upper bound contains an additional Oplogpσ{ϵqq factor. We now prove that this extra
+logarithmicpenaltyisnotanartifactofouranalysis,butafundamentalinformation-theoreticbottleneckimposedby
+1-bitquantization.
+Specifically,weprovethatany(potentiallyadaptive)1-bitmeanestimatorthatispϵ,δq-PACforthefamilyDp2,λ,σq
+withϵďcσ(forasufficientlysmallconstantcą0)andλě3ϵmustsatisfy:
+ˆ ´ ¯ ˆ ˙˙
+σ2 σ 1
+n“Ω ¨log ¨log .
+ϵ2 ϵ δ
+Proofofthebasecomplexityfork “2. We will employ a result from (Tsybakov, 2009, Theorem 2.2(iii)) that
+combines Le Cam’s two-point method combined with the Bretagnolle–Huber inequality. We construct a null
+distributionD withmean0andanalternativedistributionD¯ withmean3ϵ.BothbelongtoDp2,λ,σqwhenσ “Ωpϵq
+0
+withasufficientlylargehiddenconstant.Distinguishingthemwitherrorδrequiresthestatednumberofsamples.
+25
+----- PAGE 26 -----
+Step1(Constructionofthedistributions):Set
+Z ´ ¯^
+1 σ
+M “ log ,
+2 2 3ϵ
+a
+sothat2M ď σ{p3ϵqandM “Θplogpσ{ϵqq.Definethegridpointsx “2i¨σfori“1,...,M.
+i
+NulldistributionD :Placesymmetricpointmassesat˘x withprobabilities
+0 i
+1
+q “ , i“1,...,M.
+i 2M ¨22i
+Theremainingmass ˜ ¸
+ÿM
+1
+ÿM
+1 1
+1´ 2q “1´ 4´i ě1´ ą
+i M 3M 2
+i“1 i“1
+isplacedat0.BysymmetryE rXs“0,and
+D0
+ˆ ˙
+ÿM ÿM
+1
+ÿM
+σ2
+Var pXq“ 2q x2 “ 2 22iσ2 “ “σ2,
+D0 i i 2M22i M
+i“1 i“1 i“1
+whichimpliesD PDp2,λ,σq.
+0
+AlternativedistributionD¯:Foreachj “1,...,M,constructD bytakingD andshiftingmassp from´x to`x ,
+j 0 j j j
+where
+3ϵ
+p “ .
+j 2j`1¨σ
+Validityrequiresp ďq .Thisfollowsfromtheratio
+j j
+c Z ´ ¯^ c
+p 3ϵ 3M ¨ϵ¨2j 3M ¨ϵ¨2M 3M ¨ϵ σ 1 σ 3ϵ
+j “ ¨2M ¨22j “ ď ď ¨ “ log ¨
+q 2j`1¨σ σ σ σ 3ϵ 2 2 3ϵ σ
+j
+and the fřact that ϵ ď cσ for a sufficiently small absolute constant c (e.g., c ď 0.01). Define the uniform mixture
+D¯ “ 1 M D .ForeachconstituentdistributionD ,themeanis
+M j“1 j j
+2¨3ϵ¨2j ¨σ
+E rXs“2p ¨x “ “3ϵ.
+Dj j j 2j`1¨σ
+Because the mean of D¯ is an average of the constituent means, E D¯rXs “ 3ϵ. Furthermore, since mass was simply
+shiftedfrom´x tox ,thesecondmomentispreserved,ensuring
+j j
+Var D¯pXqďE D¯rX2s“E
+D0
+rX2s“Var
+D0
+pXq“σ2.
+Thus,D¯ PDp2,λ,σqsincethemeanconstraintλě3ϵholdsbyassumption.
+Step 2 (Reduction to Hypothesis Testing): An pϵ,δq-PAC estimator must output an estimate µˆ P r´ϵ,ϵs with
+probabilityě1´δunderD ,andµˆ Pr2ϵ,4ϵsunderD¯ withprobabilityě1´δ.Sincethesetwotargetintervalsare
+0
+strictlydisjoint,anyvalidpϵ,δq-PACestimatornativelyactsasabinaryclassifierthatdistinguishesbetweenD and
+0
+D¯ withanerrorprobabilityofatmostδ.
+Step 3 (Per-query KL divergence bound): Fix an arbitrary 1-bit query and let S Ă R be the corresponding
+measurableset.DefineP
+0
+pSq“Pr
+D0
+pX PSqandP¯ pSq“Pr D¯pX PSq.
+` › ˘
+We now upper bound the KL divergence D P¯ pSq › P pSq . Because the KL divergence between two Bernoulli
+KL 0
+distributionsisinvarianttoswappingthelabelsoftheoutcomes(i.e.,replacingS withSc),wehave:
+` › ˘ ` › ˘
+D P¯ pScq › P pScq “D P¯ pSq › P pSq .
+KL 0 KL 0
+26
+----- PAGE 27 -----
+Consequently, we may assume without loss of generality that P pSq ď 1{2. Furthermore, because D has strictly
+0 0
+morethan1{2ofitsmassat0,thesetS cannotcontain0;thusS canonlycapturemassfromthegridpointst˘x u.
+i
+Letj˚ “ mintj ě 1 : SXtx ,´x u ‰ Hu.Ifnosuchindexexists,P pSq “ P¯ pSq “ 0andtheKLdivergenceis
+j j 0
+exactly0.Otherwise,
+1
+P pSqěq “ . (26)
+0 j˚ 2M ¨22j˚
+Thedifferenceinprobabilitiesisboundedbythetotalshiftedmassfromindicesj˚onwards:
+ˇ ˇ
+ˇ ˇ
+ˇ
+ˇ P¯ pSq´P 0 pSq
+ˇ
+ˇ “
+ˇ
+ˇ ˇ ˇM 1
+ÿM `
+P Dj pSq´P 0 pSq
+˘ˇ
+ˇ ˇ ˇ ď M 1
+ÿM
+p j “ M 1
+ÿM
+2j` 3 1 ϵ ¨σ ď M 3ϵ σ ¨ 2 1 j˚ . (27)
+j“j˚ j“j˚ j“j˚
+Using (26)–(27), alongside the standard inequality D pBernppq}Bernpqqq ď
+pp´qq2
+and the condition P pSq ď
+KL qp1´qq 0
+1{2,weobtain:
+´ ¯
+2
+D pP¯ pSq}P pSqqď pP¯ pSq´P 0 pSqq2 ď 2pP¯ pSq´P 0 pSqq2 ď2¨ Mσ 3 2 ϵ j˚ “ 36ϵ2 .
+KL 0 P pSq¨p1´P pSqq P pSq 1 Mσ2
+0 0 0 2M22j˚
+Step4(Adaptiveprotocolandchainrule):Whiletheestimator’ssequentialqueryingstrategymayberandomized,
+Yao’sminimaxprinciplestatesthattheworst-caseerrorofanyrandomizedalgorithmovertD ,D¯ uislower-bounded
+0
+bytheaverageerroroftheoptimaldeterministicalgorithmunderauniformpriorovertD ,D¯ u.Therefore,toestablish
+0
+ourlowerbound,wemayassumewithoutlossofgeneralitythatthealgorithmisdeterministic.
+Underadeterministicalgorithm,eachmeasurablequerysetS isafixedfunctionofthepast1-bitresponsesYt´1 “
+t
+pY ,...,Y q. Denote by P and P¯ the joint distributions of the n-length response transcript under D and D¯,
+1 t´1 0,n n 0
+respectively.BythechainruleforKLdivergence(see(PolyanskiyandWu,2025,Theorem2.16(c))),wehave:
+` › ˘ ÿn ” ` › ˘ı
+D KL P¯ n › P 0,n “ E P¯
+Yt´1
+D KL P¯ Yt|Yt´1 › P 0,Yt|Yt´1 .
+t“1
+Conditioned on a specific realization of the past responses Yt´1, the query S is fixed. Thus, the conditional
+t
+distributionsP¯ andP areBernoullidistributionsinducedbyevaluatingthestaticsetS underD¯ and
+Yt|Yt´1 0,Yt|Yt´1 t
+D .ApplyingtheuniversalpointwiseboundfromStep3toeachconditionaltermyieldsthetotaltranscriptbound:
+0
+D
+`
+P¯
+›
+› P
+˘
+ďn¨
+36ϵ2
+. (28)
+KL n 0,n Mσ2
+Step5(LowerboundviaBretagnolle–Huber):ByapplyingtheBretagnolle–HuberinequalitytoLeCam’smethod,
+the result in (Tsybakov, 2009, Theorem 2.2(iii)) states that the average error probability δ of distinguishing the two
+hypothesesunderauniformpriorislowerboundedasfollows:
+ˆ ˙
+` ˘
+1 1
+δ ě exp ´D pP¯ }P q ùñ D pP¯ }P qělog .
+4 KL n 0,n KL n 0,n 4δ
+Applyingthisto(28)andrearranging,weobtaintherequiredsamplecomplexity:
+ˆ ˙ ˆ ´ ¯ ˆ ˙˙
+Mσ2 1 σ2 σ 1
+ně ¨log “Ω ¨log ¨log ,
+36ϵ2 4δ ϵ2 ϵ δ
+completingtheproof.
+27
+----- PAGE 28 -----
+Part2:LocalizationCost
+` ˘
+Itremainstoestablishtheadditiven“Ω log λ localizationcostforalltailregimesk ą1.
+σ
+We create N “ Θpλ{σq instances of “hard-to-distinguish” distribution pairs, which we will reuse in the proof of
+Theorem11inAppendixB.2.Divider´λ,λsintoagridofN “ λ{σ´1“center-points”spaced2σ apart,9 i.e.,the
+center-pointsare
+c “´λ`2jσ foreachj “1,2...,N. (29)
+j
+Foreachinstancej,wedefinetwoprobabilitydistributionsD andD ,eachwithatwo-pointsupportsettc ´
+j,´ j,` j
+σ{2,c `σ{2u,asfollows:
+j
+´ ¯ ´ ¯
+σ 1 ϵ σ
+D : Pr X “c ` “ ´ “1´Pr X “c ´ ùñ ErXs“c ´ϵ
+j,´ j 2 2 σ j 2 j
+´ ¯ ´ ¯ (30)
+σ 1 ϵ σ
+D : Pr X “c ` “ ` “1´Pr X “c ´ ùñ ErXs“c `ϵ.
+j,` j 2 2 σ j 2 j
+By construction, these “hard” distributions satisfy the structural properties required to be members of our target
+distributionfamilies:
+• BoundedMean:Bytheassumptionϵ ă σ{2,themeanofeachofthese2N distributionsiscontainedwithin
+thesearchranger´λ,λs.
+• BoundedSupportandSub-Gaussianity:Thesupportofeachdistributionisboundedtoanintervalofexactly
+lengthσ(thedistancebetweenc ´σ{2andc `σ{2).ByHoeffding’sLemma,anyrandomvariablebounded
+j j
+inanintervaloflengthσissub-Gaussianwithavarianceproxyofatmostσ2{4ďσ2.
+• UniversalMomentBounds:Foranyofthesedistributions,themaximumdeviationofasamplefromitstrue
+meanµis|X ´µ|ď|pc ˘σ{2q´pc ¯ϵq|ďσ{2`ϵ.Sinceϵăσ{2,weareguaranteedthat|X ´µ|ăσ.
+j j
+Consequently,thek-thcentralmomentsatisfiesEr|X´µ|ksďσk forallk ą1.
+Thus,thisspecifichardsubsetofdiscrete,boundeddistributionsinherentlybelongstothefamilyDpk,λ,σqacrossall
+tailregimesstudiedinthispaper,ensuringourlowerboundisapplicableinallsuchregimes.
+Bytheaboveconstruction,whenthedistributionsarerestrictedtoonlythese2N distributions,thetaskofbeingable
+toformanϵ-goodestimationofthetruemeanofeachunknownunderlyingdistributionisatleastashardasbeingable
+todistinguishthedistributionsfromeachother.10Weproceedtoestablishalowerboundforthisgoalofidentification,
+alsoknownasmultiplehypothesistesting.
+LetΘbeauniformrandomvariableoverthe2N distributions,whichimplies
+HpΘq“logp2Nq, (31)
+ř
+whereHpXq:“´ ppxqlogppxqistheentropyfunction.Fixanadaptivemeanestimatorthatmakesnqueries,
+xPX
+and let Yn “ pY ,...,Y q be the resulting binary responses. Using the chain rule for mutual information (see
+1 n
+e.g. (Polyanskiy and Wu, 2025, Theorem 3.7)) and the fact that each query yields at most 1 bit of information, we
+have
+ÿn ` ˘ ÿn ` ˘ ÿn ÿn
+IpΘ;Ynq“ I Θ;Y |Yk´1 ď H Y |Yk´1 ď HpY qď 1“n. (32)
+k k k
+k“1 k“1 k“1 k“1
+Moreover,Fano’sinequality(see(PolyanskiyandWu,2025,Theorem3.12))gives:
+HpΘ|YnqďH pδq`δlogp2N ´1qď1`δlogp2Nq, (33)
+2
+9For convenie`nce, we˘assume that λ is an integer multiple of 2σ. This is justified by a simple rounding argument and the fact that when
+λ“ΘpσqtheΩ logλ lowerboundistrivial.
+σ
+10Strictlyspeakingthisistruewhenthealgorithmisrequiredtoattainaccuracystrictlysmallerthanϵ,ratherthansmallerorequal,butthis
+distinctionclearlyhasnoimpactonthefinalresultstatedusingOp¨qnotation,andbyignoringitwecanavoidcumbersomenotation.
+28
+----- PAGE 29 -----
+whereδistheerrorprobabilityandH ppq“´plog ´p1´pqlogp1´pqisthebinaryentropyfunction.Using(31)–
+2 p
+(33)andthedefinitionofmutualinformation,weobtain
+něIpΘ;Ynq“HpΘq´HpΘ|Ynqělogp2Nq´1´δlogp2Nq“p1´δqlogp2Nq´1. (34)
+CombiningthiswithN “Θpλ{σq,wehave
+ˆ ˙
+λ
+n“Ωpp1´δqlogNq“Ω log
+σ
+asdesired.
+B.2 ProofofTheorem11(AdaptivityGap)
+We consider the same instance as that of Section B.1, and accordingly re-use the notation therein. Before proving
+Theorem11,wefirstintroducetheideaofanintervalquerybeing“informative”or“uninformative”fordistinguishing
+betweenthedistributionsD andD .
+j,´ j,`
+Definition 17 (Informative Interval Queries). For a fixed interval query Q “ “IsX P rα ,β s?”, we say that Q is
+t t
+informativeforthej-thpairofdistributionspD ,D qifitsbinaryfeedbackB “1tX Prα ,β susatisfies
+j,´ j,` t t
+Pr pB “1q‰ Pr pB “1q.
+X„Dj,´ X„Dj,`
+Otherwise,Qissaidtobeuninformative.
+Thefollowinglemmashowsthateachintervalquerycanbesimultaneouslyinformativeforatmosttwodifferentpairs.
+Lemma 18. An interval query Q “ “IsX P rα ,β s?”can be simultaneously informative for at most two different
+t t
+pD ,D qpairs,i.e.,atmosttwodifferentvaluesofj.
+j,´ j,`
+ProofofLemma18. Theclaimfollowsfromthefollowingtwofacts:
+1. For a fixed distribution pair (indexed by j), an interval query Q “ “IsX P rα ,β s?” is informative for
+t t
+distiˇnguishingbetweenD j,ˇ´ andD j,` onlyifrα t ,β t scontainsexactlyoneofthetwosupportpointstc j ˘σ{2u,
+ˇ ˇ
+i.e., rα ,β sXtc ˘σ{2u “1.
+t t j
+ˇ ˇ
+ˇ ˇ
+2. Thereareatmosttwoindicesj forwhich rα ,β sXtc ˘σ{2u “1.
+t t j
+Fact1canbeverifiedbyanalyzingthebinaryfeedbackB “1tX Prα ,β suforallcasesofrα ,β sXtc ˘σ{2u:
+t t t t j
+ˇ ˇ
+ˇ ˇ
+rα ,β sXtc ˘σ{2u Pt0,2u ùñ Pr pB “1q“ Pr pB “1q ùñ Qisuninformative,
+t t j
+X„Dj,´ X„Dj,`
+and
+ˇ ˇ ˇ ˇ
+ˇ ˇ ˇ ˇ 2ϵ
+rα ,β sXtc ˘σ{2u “1 ùñ Pr pB “1q´ Pr pB “1q “ ùñ Qisinformative. (35)
+t t j X„Dj,´ X„Dj,` σ
+ForFact2,wefirstobservefrom(29)thatthesupportpointsofall2N distributionssatisfy
+σ σ σ σ σ
+c ´ ăc ` ăc ´ ă¨¨¨ăc ´ ăc ` ,
+1 2 1 2 2 2 N 2 N 2
+witheachˇ pairjhavingauniquˇedisjointintervalpc
+j
+´σ{2,c
+j
+`σ{2qbetweenitssupportpoints.Anintervalrα
+t
+,β
+t
+s
+ˇ ˇ
+satisfies rα ,β sXtc ˘σ{2u “1ifandonlyifexactlyoneendpointofrα ,β sliesintheintervalpc ´σ{2,c `
+t t j t t j j
+σˇ {2q. Since the gaps aˇre disjoint and rα
+t
+,β
+t
+s has only two endpoints, it follows that at most two indices j satisfy
+ˇ ˇ
+rα ,β sXtc ˘σ{2u “1.
+t t j
+29
+----- PAGE 30 -----
+ProofofTheorem11. Consider an arbitrary algorithm that makes n non-adaptive interval queries. Recall the set of
+2N distributionstD ,D uN Ď Dpλ,σqconstructedintheproofofTheorem9,whereN “ λ{σ´1.Wewill
+j,´ j,` j“1
+againestablishalowerboundforthis“hardsubset”ofdistributions,butwithdifferentdetailstoexploittheassumption
+ofnon-adaptiveintervalqueries.
+RecallfromSectionB.1thatthemeansofthe2N distributionsarepairwiseseparatedby2ϵormore,andthus,attaining
+ϵ-accuracyimpliesbeingabletoidentifytheunderlyingdistributionfromthehardsubset.Weproceedtoestablisha
+lowerboundforthisgoalofidentification(multiplehypothesistesting).
+Supposethatthetruedistributionisdrawnuniformlyatrandomfromthe2N distributionsinthehardsubset.ByYao’s
+minimaxprinciple,theworst-caseerrorprobabilityislowerboundedbytheaverage-caseerrorprobabilityofthebest
+deterministicstrategy,sowemayassumethatthealgorithmisdeterministic(inthechoiceofqueriesandtheprocedure
+forformingthefinalestimate).
+Lettingpˆj,sˆqbetheestimatedindex(int1,...,Nu)andsign(int1,´1u),theaverage-caseerrorprobabilityisgiven
+by
+1
+ÿN ÿ
+Prperrorq“ Prppˆj,sˆq‰pj,sqq (36)
+2N j,s
+j“1sPt`1,´1u
+ˆ ˙
+1
+ÿN
+1
+` ˘
+1
+` ˘
+ě Pr sˆ‰1 ` Pr sˆ‰´1 , (37)
+N l2oojo,o`ooooooooooooooom2ooojo,o´oooooooooooooon
+j“1
+“:Prjperrorq
+wherePr denotesprobabilitywhentheunderlyingdistributionisD .
+j,s j,s
+For each j “ 1,...,N, we define n to be the algorithm’s total number of interval queries that are informative (in
+j
+thesenseofDefinition17)fordistinguishingbetweenD andD .Sincethealgorithmisdeterministicandthen
+j,´ j,`
+queriesareassumedtobenon-adaptive(i.e.,theymustallbechoseninadvance),itfollowsthatthevaluestn uN
+j j“1
+arealsodeterministic.
+Recall from (35) that each informative query provides binary feedback that follows either Bernpp q or Bernpp q,
+` ´
+wherep “1{2`ϵ{σandp “1{2´ϵ{σ “1´p .Distinguishingbetweenthesetwocasesisabinaryhypothesis
+` ´ `
+testingproblem,andtheassociatederrorprobabilityPr perrorqisgivenbythej-thsummandin(37).
+j
+Usingstandardbinaryhypothesistestinglowerbounds(Lee,2020,Theorem11.9),wehave11
+` ˘
+Prperrorqąexp ´c1¨n ¨d2 pp ,p q (38)
+j H ` ´
+j
+ř ` ˘
+for some constant c1, where d2 pp,qq “ 1 ? p ´ ? q 2 is the Squared Hellinger distance. For Bernpp q and
+H 2 i i i `
+Bernpp q,wehavethefollowingstandardcalculation:
+´
+ˆ ˙ ˆ ˙
+d2 H pp ` ,p ´ q“ ` ? p ` ´ ? p ´ ˘ 2 “ ? p p ` ` ´ ` p ? ´ p ´ 2 “ ` 1 | ` p ` 2 ? ´ p p ` ´ p | ´ 2 ˘ 2 “Θ ` |p ` ´p ´ |2 ˘ “Θ σ ϵ2 2 , (39)
+wheretheequalitiesfollowfromthefactsthatp `p “1andp p Pr0,1{4s.Combining(38)and(39),weobtain
+` ´ ` ´
+ˆ ˙
+n ϵ2
+Prperrorqąexp ´c2¨ j (40)
+j σ2
+ř
+for some constant c2 ą 0. Applying Jensen’s inequality (since exp is convex) and using N n ď 2n (see
+j“1 j
+Lemma18),itfollowsthat
+ˆ ˙ ˜ ¸ ˆ ˙
+1
+ÿN
+1
+ÿN
+n ϵ2 ϵ2 1
+ÿN
+ϵ2 2n
+Prperrorqą exp ´c2¨ j ěexp ´c2¨ ¨ n ěexp ´c2¨ ¨ .
+N j N σ2 σ2 N j σ2 N
+j“1 j“1 j“1
+11Wehavere-arrangedtheirresulttoexpressotherquantitiesintermoftheerrorprobability.
+30
+----- PAGE 31 -----
+Itfollowsthatif
+ˆ ˙ ˆ ˙ ˆ ˙ ˆ ˙
+1 λσ 1 1 λ σ2 1 1 σ2 1 N σ2 1
+nă ¨ log “ ¨ ¨ ¨log “ ¨pN `1q¨ ¨log ď log ,
+4c2 ϵ2 δ 4c2 σ ϵ2 δ 4c2 ϵ2 δ 2c2 ϵ2 δ
+thentheaverageerrorprobabilityislowerboundedby
+ˆ ˙ ˆ ˆ ˙˙
+1
+ÿN
+ϵ2 2n 1
+Prperrorqąexp ´c2¨ ¨ ěexp log “δ.
+N j σ2 N δ
+j“1
+Therefore,toattainanerrorprobabilitynohigherthanδ,wemusthave
+ˆ ˆ ˙˙
+λσ 1
+n“Ω log
+ϵ2 δ
+asdesired.
+C Unknown Parameters
+C.1 ProofofTheorem12(UnknownTargetAccuracy)
+Wefirstdecomposetherefinementsamplecomplexityin(5)intoanaccuracy-dependentscalingfunctiong pσ,ϵqand
+k
+aprobabilityterm:
+n pϵ,δ,k,σq“g pσ,ϵq¨logp1{δq,
+ref k
+whereg k pσ,ϵqisdefinedas: $ ˆ´ ¯ ˙
+’’’’’’’’’’’&
+Θ
+k
+ˆ´
+σ
+ϵ
+¯
+2
+´ ¯˙
+ifk ą2
+σ 2 σ
+g pσ,ϵq“ Θ ¨log ifk “2
+k ’’’’’’’’’’’%Θ
+ˆ´
+ϵ
+σ
+¯
+k´
+k
+1
+˙
+ϵ
+ifk Pp1,2q.
+k ϵ
+Letp “ 2fork ě 2,andp “ k ą 2fork P p1,2q.Becausethelogarithmicpenaltyinthek “ 2regimestrictly
+k´1
+increasesasϵshrinks,wecanestablishageometriclowerboundonthegrowthofg pσ,¨q.Specifically,wehave
+k
+ˆˆ ˙ ˙
+g pσ,ϵ q ϵ p
+k 1 “Ω 2 forany0ăϵ ďϵ ďσ. (41)
+g pσ,ϵ q ϵ 1 2
+k 2 1
+Fixaroundτ andconsiderthepriorroundssďτ.Applying(41)toϵ “ϵ andϵ “ϵ “2τ´s¨ϵ gives
+1 τ 2 s τ
+´ ¯
+g pσ,ϵ q“O 2´ppτ´sq¨g pσ,ϵ q . (42)
+k s k τ
+Combiningthisgeometricdecaywiththetrivialboundlogp1{δ q ď logp1{δ qforalls ď τ,thecumulativesample
+s τ
+complexityisdominatedbythefinalround:
+˜ ¸
+ÿτ ÿτ
+n pϵ ,δ ,k,σq“O g pσ,ϵ q¨logp1{δ q
+ref s s k s s
+s“1 ˜s“1 ¸
+ÿτ
+“O g pσ,ϵ q¨logp1{δ q¨ 2´ppτ´sq
+k τ τ
+s“1
+“Opg pσ,ϵ q¨logp1{δ qq. (43)
+k τ τ
+31
+----- PAGE 32 -----
+Wenowrelatetheanytimeperformancetotheoracleaccuracyϵ˚,whichsatisfiestheimplicitequation
+´ ¯
+n pϵ˚,δ,k,σq“n ´n “Θ g pσ,ϵ˚q¨logp1{δq . (44)
+ref true loc k
+Bythedefinitionofthestoppingconditionin(7),roundT completessuccessfully,butattemptingroundT `1would
+exceedtheavailablebudget:
+Tÿ`1
+n ´n ă n pϵ ,δ ,k,σq. (45)
+true loc ref s s
+s“1
+Substituting(44)intotheleftsideof(45)andboundingtherightsideusing(43)yields
+g pσ,ϵ˚q¨logp1{δq“Opg pσ,ϵ q¨logp1{δ qq.
+k k T`1 T`1
+Rearrangingthetermstoisolatetheratioofg p¨qandsubstitutingδ “ 6δ gives
+k s π2s2
+ˆ ˙ ˆ ˙ ˆ ˙
+g pσ,ϵ˚q logp1{δ q 2logpT `1q`logpπ2{6q logpT `1q
+k “O T`1 “O 1` “O 1` . (46)
+g pσ,ϵ q logp1{δq logp1{δq logp1{δq
+k T`1
+To map this scaling bound back to the target accuracies, we consider two cases based on the relative size of ϵ˚ and
+ϵ :
+T`1
+• Case1(ϵ˚ ěϵ ):Becausethetargetaccuracyishalvedateachround,wehaveϵ “2ϵ “Opϵ˚qtrivially.
+T`1 T T`1
+• Case2(ϵ˚ ăϵ ):Applying(41)totheleftsideof(46)withϵ “ϵ˚andϵ “ϵ yields
+T`1 1 2 T`1
+´ ¯ ˆ ˙ ˆ ˙ ˜ ˆ ˙ 1 ¸
+ϵ T`1 p “O g k pσ,ϵ˚q “O 1` logpT `1q ùñ ϵ “2ϵ “O ϵ˚ 1` logpT `1q p .
+ϵ˚ g pσ,ϵ q logp1{δq T T`1 logp1{δq
+k T`1
+Finally, we bound the round index T. Because the anytime estimator cannot surpass the oracle efficiency given
+the same budget, we trivially have ϵ ě ϵ˚, which implies 2T ď σ{ϵ˚ and thus T ď log pσ{ϵ˚q. Therefore,
+T 2
+logpT `1q“Oploglogpσ{ϵ˚qq,whichgivesusthedesiredbound:
+˜ ˆ ˙ ¸
+1
+loglogpσ{ϵ˚q p
+ϵ “O ϵ˚ 1` .
+T logp1{δq
+C.2 ProofofTheorem13(AdaptingtoUnknownScale)
+RecallthatineachroundiPt0,1,...,Tu,thealgorithminvokesthemainestimatorwithtargetaccuracyϵ “rσ {6,
+i i
+guessed scale parameter σ , and failure probability δ “ δ{pT ` 1q. We first bound the worst-case total sample
+i i
+complexity n, which occurs if the estimator does not halt early and run all T `1 loops. Applying the upper bound
+fromTheorem5forthesamplecomplexitynpϵ ,δ ,λ,σ qofeachroundi,andsummingoverallroundsyields
+i i i
+ˆ ˆ ˙ ˆ ˙ ˆ ˙˙ ˜ ˆ ˙ ˆ ˙¸
+ÿT
+σ 1 λ T `1
+ÿT
+λ
+n“ O S i log `log “O pT `1q¨S prqlog ` log , (47)
+k ϵ δ σ k δ σ
+i“0 i i i i“0 i
+where $
+’’’’’’’’’’&
+r
+1
+1
+2
+ˆ
+1
+˙
+ifk ą2
+log ifk “2
+S k prq“ ’’’’’’’’’’%
+ˆ
+r2
+1
+˙
+k´
+k
+1
+r
+ifk Pp1,2q
+r
+32
+----- PAGE 33 -----
+is the asymptotic scaling defined in Theorem 13). Recalling that σ is a geometric sequence with σ “ σ and
+i 0 max
+σ “Θpσ q(see(8)and(9)),wecanevaluatethesummationoverthelocalizationtermsby
+T min
+ˆ ˙ ˜ ¸ ˜ ¸ ˆ ˙ ˆ ˙
+ÿT
+λ
+źT
+λ λT`1 λ λ
+i“0
+log
+2 σ i
+“log
+2 i“0 σ i
+“log
+2
+`
+? σ 0 ¨σ T
+˘
+T`1
+“Θ T log?
+σ 0 ¨σ T
+“Θ T log?
+σ min ¨σ max
+,
+wherethesecondequalityfollowsfrśomthefactthattheproductofafinitegeometricsequenceisitsgeometricmean
+?
+raisedtothenumberofterms(i.e., T σ “ p σ ¨σ qT`1).Combiningtheabovetwofindingsandsubstituting
+i“0 i 0 T
+T “rlog pσ {σ qsgivesthedesiredsamplecomplexity:
+2 max min
+ˆ ˆ ˙ ˆ ˆ ˙ ˆ ˙˙˙
+σ logpσ {σ q λ
+n“O log σ max ¨ S k prq¨log ma δ x min `log ? σ σ .
+min min max
+Wenowshowthatselectedoutputµˆpi˚qispϵ,δq-PACfortherelativetargetaccuracyϵ“rσ ,i.e.,
+true
+´ˇ ˇ ¯
+ˇ ˇ
+Pr ˇµˆpi˚q´µˇďrσ ě1´δ. (48)
+true
+Letj˚bethelargestgridindex(correspondingtothetightestvalidscale)thatstillupperboundsthetruescale,i.e.,
+j˚ “maxtσ ěσ u. (49)
+i true
+iě0
+Duetothegeometricspacingσ “σ ¨2´i,weareguaranteedthatthescaleatj˚tightlyboundsthetruescale:
+i max
+2ϵ
+σ ď2σ “ . (50)
+j˚ true r
+For each round i ď j˚, the guessed parameter satisfies σ ě σ . Therefore, the distribution validly satisfies the
+i true
+assumedmomentboundEr|X´µ|ksďσk,ensuringthatthesubroutine’stheoreticalguaranteeshold.LetE “tµP
+i i
+I ubetheeventthatthetruemeanliesinthei-thconfidenceintervalI “ rµˆpiq˘ϵ s.Bythesubroutine’sguarantee,
+i i i
+theeventE
+i
+occurswitŞhprobabilityatleast1´δ
+i
+“1´δ{pT `1q.Applyingtheunionboundoverallvalidrounds,
+the“goodevent”E “ E happenswithprobabilityatleast
+iďj˚ i
+˜ ¸ ˜ ¸
+č ď ÿ ÿ ÿT
+PrpEq“Pr E “1´Pr ␣E ě1´ Prp␣E qě1´ δ ě1´ δ “1´δ.
+i i i i i
+iěk iěk iěk iěk i“0
+We condition on the event E for the rest of the proof. Under event E, we have µ P I for all i ď j˚, and so all
+i
+confidenceintervalsuptoj˚ mutuallyintersectatthetruemeanµ.Consequently,thealgorithm’sstoppingcondition
+(I XI “Hforsomel ăi)willnottriggeratanystepiďj˚.Therefore,thelastsuccessfulindexi˚ “i´1must
+i l
+satisfyi˚ ěj˚,whichimplies
+σ ďσ (51)
+i˚ j˚
+To establish the PAC guarantee, we analyze the estimation error of µˆpi˚q. By the algorithm’s acceptance criteria,
+because the interval I was successfully accepted, it must intersect with all previously established intervals. In
+i˚
+particular,becausej˚ ďi˚,thereexistsacommonpointz PI XI .Bythedefinitionoftheintervals((see(10))),
+i˚ j˚
+wehave|µˆpi˚q´z|ďϵ and|µˆpj˚q´z|ďϵ .Applyingthetriangleinequalityyields
+i˚ j˚
+|µˆpi˚q´µ|ď|µˆpi˚q´z|`|z´µˆpj˚q|`|µˆpj˚q´µ|ďϵ `2ϵ .
+i˚ j˚
+Usingthetargetaccuracychoiceofϵ “rσ {6andbounds(50)–(51),weobtainthedesiredguarantee:
+i i
+rσ 2rσ 3rσ
+|µˆpiq ´µ|ďϵ `2ϵ “ i˚ ` j˚ ď j˚ ďrσ “ϵ.
+i˚ j˚ 6 6 6 true
+33
+----- PAGE 34 -----
+D Details of the Two-stage Mean Estimator
+Hereweprovidethetechnicaldetailsforthenon-adaptivelocalizationprotocoldescribedinSection4.3.Thegoalof
+thisprotocolistonon-adaptivelyidentifyanintervalI oflengthOpσqthatcontainsthemeanµwithhighprobability.
+Thecoreideaisadaptedfrom(CaiandWei,2024),whosefocusisonGaussiandistributions.Wemodifytheirapproach
+to handle our general non-parametric family Dpk,λ,σq for any k ą 1. The protocol encodes the location of the
+mean using a binary Gray code of length M “ Θplogpλ{σqq, and estimates each of these M bits by aggregating
+responsesfromsuitablychosennon-adaptive1-bitqueries.Wenowformalizethenecessarydefinitionsanddescribe
+theprocedure.
+Definition19(Grayfunction). Letτ : R Ñ r0,1sbethetruncationfunctionτ pxq “ maxp0,minp1,xqq.For
+r0,1s r0,1s
+integersℓě0,weletg : RÑt0,1ubetheℓ-thGrayfunction,definedby
+ℓ
+# X \
+0 if 2ℓ¨τ pxq mod4Pt0,3u
+g pxq:“ X r0,1s \ .
+ℓ 1 if 2ℓ¨τ pxq mod4Pt1,2u
+r0,1s
+Definition20(Changepointsset). ThesetG ofchangepointsforg isdefinedasthecollectionofpointsx P r0,1s
+ℓ ℓ
+whereg pxqchangesitsvaluefrom0to1orfrom1to0.Formally,
+ℓ
+" *
+␣ (
+G “ p2j´1q¨2´ℓ :1ďj ď2ℓ´1 “ xPr0,1s: lim g pyq‰ lim g pyq .
+ℓ ℓ ℓ
+yÑx´ yÑx`
+NotethatthesetsG arepairwisedisjoint,i.e.,G XG “∅forℓ‰ℓ1.
+ℓ ℓ ℓ1
+Definition21(Decoding). ForanyM ě1,weletDec : t0,1uM Ñ2r0,1sbethedecodingfunctiondefinedby
+M
+Dec py ,...,y q:“txPr0,1s:g pxq“y for1ďℓďMu.
+M 1 M ℓ ℓ
+This forms a dyadic interval of leng“th 2´M that is‰consistent with the Gray code bits y
+1
+,y
+2
+,...,y
+M
+, which can be
+expressedasDec py ,...,y q“ x ,x `2´M Ăr0,1sforsomebasepointx .
+M 1 M 0 0 0
+Withthesedefinitionsinmind,wenowdescribethelocalizationprocedure.
+1. Rescaling:Wefirstrescalethesamplesandthetruemean,sothatthescaledmeanliesontheunitinterval:
+X`λ µ`λ
+X1 “ and µ1 “ Pr0,1s.
+2λ 2λ
+Notethattheresultingk-thcentralmomentboundscalesaccordinglyas
+“ ‰ ´ ¯
+σ k
+E |X1´µ1|k ď . (52)
+2λ
+2. Samplegrouping:Letthetotalnumberofbitstobeestimatedbe12
+Z ˆ ˙ ^
+λ 2
+M “ log ´1´ . (53)
+2 σ k
+P T
+Each bit ℓ P t1,...,Mu is estimated using a fixed g´roup
+`
+of
+˘
+samples of siz¯e J “ 8 ln2M
+δ
+. Thus, the total
+numberofsamplesused(forlocalization)isMJ “Θ log λ ¨loglogpλ{σq .
+σ δ
+3. Querying:Forsamplej ingroupℓ,thelearnerissuesafixed1-bitquerytoobserve
+Z “g pX1 q,
+ℓ,j ℓ ℓ,j
+whereX1 isanindependenttransformedunquantizedsampleobservedbyanagent.
+ℓ,j
+12Weassumewithoutlossofgeneralitythatλ{σě22`2{k;otherwise,theinitialsearchspacer´λ,λsisalreadyoflengthOpσq,andthelearner
+canbypassthislocalizationstepentirely.Underthisassumption,theterminsidethefloorfunctionisatleast1.
+34
+----- PAGE 35 -----
+4. Majority-voting:Foreachbitℓ“1,...,M,thelearnercomputesthemajorityvote
+# +
+ÿJ
+J
+zˆ “MajtZ ,...,Z u“1 Z ě .
+ℓ ℓ,1 ℓ,J ℓ,j 2
+j“1
+“ ‰
+5. DecodingandWidening:Thelearnercomputesthebaseinterval x ,x `2´M “ Dec pzˆ ,...,zˆ q,and
+0 0 M 1 M
+widensitbyshiftingtheendpointsoutwardby2´pM`2qtoabsorbboundaryerrors:
+” ı
+I1 “ x ´2´pM`2q, x `2´M `2´pM`2q Xr0,1s. (54)
+0 0
+Finally, it scales and shifts the widened interval I1 “ rL1,U1s back to the original space, returning I “
+r2λL1´λ, 2λU1´λs.BythechoiceofM in(53),thelengthofthereturnedintervalsatisfies
+´ ¯ ´ ¯
+σ
+|I|“2λ¨pU1´L1qď2λ¨ 2´M `2¨2´pM`2q “3λ¨2´M ď3λ¨ ¨22`2{k “Opσq. (55)
+λ
+Before proving Theorem 14, we state three supporting lemmas. Lemma 22 is a restatement of (Cai and Wei,
+2024)[Lemma17](whoseproofiselementaryandstraightforward),whiletheothertwolemmasboundtheencoding
+anddecodingerrorprobability.
+Lemma22(WidenedIntervalContainment(CaiandWei,2024)[Lemma17]). LetI1bethewidenedintervalin(54).
+IfeachbitℓPt1,...,Musatisfiesthecondition
+d :“ inf |µ1´y|ă2´pM`2q or zˆ “g pµ1q, (56)
+ℓ ℓ ℓ
+yPGℓ
+thenµ1 PI1.NotethatbecausethechangepointgridsG areseparatedbyatleast2´M,thereisatmostonebitℓthat
+ℓ
+cansatisfytheboundaryproximityconditiond ă2´pM`2q.
+ℓ
+Lemma23(EncodingErrorProbability). Foreachbitℓ“1,...,M andeachsamplej,wehave
+ˆ ˙
+` ˘ σ k
+Pr g pX1 q‰g pµ1q ď ,
+ℓ ℓ,j ℓ 2λd
+ℓ
+whered “inf |µ1´y|isthedistancefromthetransformedmeantothenearestchangepoint.
+ℓ yPGℓ
+Proof. Bythedefinitionsofd andG ,thefunctiong pxqchangesvalueonlyifitstruncatedinputτ pxqcrossesa
+ℓ ℓ ℓ r0,1s
+changepointinG .Becausetruncationtor0,1sisanon-expansiveprojectionandµ1 Pr0,1s,wehave
+ℓ
+|τ pX1 q´µ1|“|τ pX1 q´τ pµ1q|ď|X1 ´µ1|.
+r0,1s ℓ,j r0,1s ℓ,j r0,1s ℓ,j
+Therefore,ifthe“unclampeddistance”|X1 ´µ1|islessthand ,thenthedistancebetweenthetruncatedsampleand
+ℓ,j ℓ
+thetruemeanisalsolessthand .Thisguaranteesthatthetruncatedsamplehasnotcrossedtheboundaryofthenearest
+ℓ
+change point, ensuring g pX1 q “ g pµ1q. In other words, an encoding error can thus occur only if the unclamped
+ℓ ℓ,j ℓ
+sampledeviatesfromµ1 byatleastd .Combiningthiswiththek-momentChebyshev’sinequality(Lemma16)and
+ℓ
+thescaledmomentboundfrom(52)yields
+”ˇ ˇ ı
+` ˘ ` ˘ E ˇ X ℓ 1 ,j ´µ1 ˇk ˆ σ ˙ k
+Pr g pX1 q‰g pµ1q ďPr |X1 ´µ1|ěd ď ď .
+ℓ ℓ,j ℓ ℓ,j ℓ dk 2λd
+ℓ ℓ
+Lemma24´(Majority-VoteDec¯odingErrorProbability). Fixabitℓ P t1,...,Mu.Supposethatthei.i.d.queryerror
+satisfiesPr g pX1 q‰g pµ1q ď1{4.ThenundertheallocationJ “r8lnp2M{δqs,themajorityvotezˆ satisfies
+ℓ ℓ,j ℓ ℓ
+ˆ ˙
+` ˘
+J δ
+Pr zˆ ‰g pµ1q ďexp ´ ď .
+ℓ ℓ 8 2M
+35
+----- PAGE 36 -----
+Proof. LetS „ BinomialpJ,pqcountthetotalnumberofincorrectvotes,wherep ď 1{4.Theexpectednumberof
+errorsisErSsďJ{4.ThemajorityvotefailsonlyifS ěJ{2.ApplyingHoeffding’sinequalityyields
+ˆ ˙ ˆ ˙ ˆ ˙ ˆ ˙
+` ˘ J J 2pJ{4q2 J δ
+Pr zˆ ‰g pµ1q “Pr S ě ďPr S´ErSsě ďexp ´ ďexp ´ ď
+ℓ ℓ 2 4 J 8 2M
+asdesired.
+ProofofTheorem14. Given the guaranteed interval length in (55), it remains to show that µ1 P I1 (which implies
+µPI)withprobabilityatleast1´δ{2.InviewofLemma22,wedefinethe“goodevents”
+! )
+E “ d ă2´pM`2qorzˆ “g pµ1q (57)
+ℓ ℓ ℓ ℓ
+andshowthat ˜ ¸
+čM
+Pr E ě1´δ{2.
+ℓ
+ℓ“1
+Bytheunionbound,itissufficienttoshowthateachindividual“badevent”E¯ occurswithprobabilityatmostδ{p2Mq.
+ℓ
+Fix an arbitrary bit ℓ P t1,...,Mu. If d ă 2´pM`2q, then the good event (57) is deterministically true, yielding
+ℓ
+PrpE¯ q“0.Therefore,weassumewithoutlossofgeneralitythatd ě2´pM`2q,whichimplies1{d ď2M`2.
+ℓ ℓ ℓ
+UsingthisassumptionalongsidethechoiceofM ď log pλ{σq´1´2{k from(53),wecanboundthebasetermin
+2
+Lemma23by
+σ σ σ σ λ
+ď ¨2M`2 ď ¨2log 2 pλ{σq`1´2{k “ ¨ ¨21´2{k “2´2{k.
+2λd 2λ 2λ 2λ σ
+ℓ
+ApplyingLemma23,theprobabilityofasingle-bitencodingerrorisboundedby
+` ˘ ´ ¯
+k 1
+Pr g pX1 q‰g pµ1q ď 2´2{k “2´2 “ .
+ℓ ℓ,j ℓ 4
+Because the single-bit error is at most 1{4, Lemma 24 guarantees that the majority vote error probability is at most
+δ{p2Mq.Thus,PrpE¯ q“Prpzˆ ‰g pµ1qqďδ{p2Mqasdesired.
+ℓ ℓ ℓ
+36

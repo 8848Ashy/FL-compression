@@ -1,0 +1,1039 @@
+----- PAGE 1 -----
+DRIVE: One-bit Distributed Mean Estimation
+ShayVargaftik˚ RanBenBasat˚ AmitPortnoy˚
+VMwareResearch UniversityCollegeLondon Ben-GurionUniversity
+shayv@vmware.com r.benbasat@cs.ucl.ac.uk amitport@post.bgu.ac.il
+GalMendelson YanivBen-Itzhak MichaelMitzenmacher
+StanfordUniversity VMwareResearch HarvardUniversity
+galmen@stanford.edu ybenitzhak@vmware.com michaelm@eecs.harvard.edu
+Abstract
+Weconsidertheproblemwherenclientstransmitd-dimensionalreal-valuedvec-
+torsusingdp1`op1qqbitseach,inamannerthatallowsthereceivertoapprox-
+imately reconstruct their mean. Such compression problems naturally arise in
+distributed and federated learning. We provide novel mathematical results and
+derivecomputationallyefficientalgorithmsthataremoreaccuratethanprevious
+compressiontechniques. Weevaluateourmethodsonacollectionofdistributed
+and federated learning tasks, using a variety of datasets, and show a consistent
+improvementoverthestateoftheart.
+1 Introduction
+In many computational settings, one wishes to transmit a d-dimensional real-valued vector. For
+example, in distributed and federated learning scenarios, multiple participants (a.k.a. clients) in
+distributed SGD send gradients to a parameter server that averages them and updates the model
+parameters accordingly [1]. In these applications and others (e.g., traditional machine learning
+methodssuchK-Meansandpoweriteration[2]orothermethodssuchasgeometricmonitoring[3]),
+sendingapproximationsofvectorsmaysuffice. Moreover,thevectors’dimensiondisoftenlarge
+(e.g.,inneuralnetworks,dcanexceedabillion[4,5,6]),sosendingcompressedvectorsisappealing.
+Indeed,recentworkshavestudiedhowtosendvectorapproximationsusingrepresentationsthatuse
+asmallnumberofbitsperentry(e.g.,[2,7,8,9,10,11]). Further,recentworkhasshowndirect
+trainingtimereductionfromcompressingthevectorstoonebitpercoordinate[12]. Mostrelevantto
+ourworkaresolutionsthataddressthedistributedmeanestimationproblem.Forexample,[2]usesthe
+randomizedHadamardtransformfollowedbystochasticquantization(a.k.a. randomizedrounding).
+Wheneachof`then˘clientstransmitsOpdqbits,theirNormalizedMeanSquaredError(NMSE)is
+boundedbyO lo
+n
+gd . TheyalsoshowaOp
+n
+1qboundwithOpdqbitsviavariab`le-le˘ngthencoding,
+albeitatahighercomputationalcost. Thesamplingmethodof[10]yieldsanO r¨R NMSEbound
+n
+usingdp1`op1qqbitsinexpectation,whereriseachcoordinate’srepresentationlengthandRis
+thenormalizedaveragevarianceofthesentvectors. Recently,researchersproposedtouseKashin’s
+representation[11,13,14]. Broadlyspeaking,itallowsrepresentingad-dimensiona´lvectorin(¯a
+higher)dimensionλ¨dforsomeλą1usingsmallcoefficients. ThisresultsinanO ? λ2
+p λ´1q4¨n
+NMSEbound,whereeachclienttransmitsλ¨dp1`op1qqbits[14].Arecentwork[15]suggestedan
+algorithmwhereifallclients’vectorshavepairwisedistancesofatmosty PR(i.e.,foranyclientpair
+(cid:13) (cid:13)
+c 1 ,c 2 ,itholdsthat(cid:13)x pc1q ´x pc2q (cid:13) 2 ďy),theresultingMSEisOpy2q(whichistightwithrespectto
+˚EqualContribution.
+35thConferenceonNeuralInformationProcessingSystems(NeurIPS2021).
+----- PAGE 2 -----
+y)usingOp1qbitspercoordinateonaverage. ThissolutionprovidesastrongerMSEboundwhen
+vectorsaresufficientlyclose(andthusyissmall)butdoesnotimprovetheworst-caseguarantee.
+Westepbackandfocusonapproximatingd-dimensionalvectorsusingdp1`op1qqbits(e.g.,one
+bitperdimensionandalowerorderoverhead). Wedevelopnovelbiasedandunbiasedcompression
+techniquesbasedon(uniformaswellasstructured)randomrotationsinhigh-dimensionalspheres.
+Intuitively,afterarotation,thecoordinatesareidenticallydistributed,allowingustoestimateeachco-
+ordinatewithrespecttotheresultingdistribution. Ouralgorithmsdonotrequireexpensiveoperations,
+suchasvariable-lengthen`cod˘ingorcomputingtheKashin’srepresentation,andarefastandeasytoim-
+plement. WeobtainanO 1 NMSEboundusingdp1`op1qqbits,regardlessofthecoordinates’rep-
+n
+resentationlength,improvingoverpreviousworks. Evaluationresultsindicatethatthistranslatestoa
+consistentimprovementoverthestateoftheartindifferentdistributedandfederatedlearningtasks.
+2 ProblemFormulationandNotation
+1b-VectorEstimation. Westartbyformallydefiningthe1b-vectorestimationproblem. Asender,
+calledBuffy,getsareal-valuedvectorx P Rd andsendsitusingadp1`op1qqbitsmessage(i.e.,
+asymptoticallyonebitpercoordinate). Thereceiver,calledAngel,usesthemessagetoderivean
+estimatexpoftheoriginalvectorx. Weareinterestedinthequantity x´xp 2,whichisthesumof
+(cid:107) (cid:107)2
+squarederrors(SSE),anditsexpectedvalue,theMeanSquaredError(MSE).Foreaseofexposition,
+wehereafterassumethatx‰0asthisspecialcasecanbehandledwithoneadditionalbit. Ourgoal
+Er(cid:107)x´xp(cid:107)2s
+istominimizethevector-NMSE(denotedvNMSE),definedasthenormalizedMSE,i.e., 2 .
+(cid:107)x(cid:107)2
+2
+1b-DistributedMeanEstimation. Theaboveproblemnaturallygeneralizestothe1b-Distributed
+Mean Estimation problem. Here, we have a set of nPN clients and a server. Each client c P
+t1,...,nuhasitsownvectorx PRd,whichitsendsusingadp1`op1qq-bitsmessagetotheserver.
+pcq ř
+TheserverthenproducesanestimatexyPRdoftheaveragex “ 1 n x withthegoalof
+avg avg n c“1 pcq
+minimizingitsNMSE,definedastheaverageestimate’sMSEnormalizedbytheaveragenormofthe
+clients’originalvectors,i.e.,
+Er(cid:107)
+ř
+xavg´xy avg(cid:107)2
+2
+s
+.
+n 1¨ n c“1(cid:107) x pcq(cid:107) 2 2
+Notation. Weusethefollowingnotationanddefinitionsthroughoutthepaper:
+Subscripts. x denotesthei’thcoordinateofthevectorx,todistinguishitfromclientc’svectorx .
+i pcq
+Binary-sign. ForavectorxPRd,wedenoteitsbinary-signfunctionassignpxq,wheresignpxq “1
+i
+ifx ě0andsignpxq “´1ifx ă0.
+i i i
+Unit vector. For any (non-zero) real-valued vector x P Rd, we denote its normalized vector by
+x˘“ x . Thatis,x˘andxhasthesamedirectionanditholdsthat x˘ “1.
+(cid:107)x(cid:107) 2 (cid:107) (cid:107)2
+RotationMatrix. AmatrixRPRdˆdisarotationmatrixifRTR“I. Thesetofallrotationmatrices
+isdenotedas pdq. Itfollowsthat@RP pdq:detpRqPt´1,1uand@xPRd: x “ Rx .
+O O (cid:107) (cid:107)2 (cid:107) (cid:107)2
+Random Rotation. A random rotation is a distribution over all random rotations in pdq. For
+ease of exposition, we abuse the notati R on and given x P Rd denote the random rotatio O n of x by
+pxq“Rx,whereRisdrawnfrom . Similarly, ´1pxq“R´1x“RTxistheinverserotation.
+R R R
+RotationProperty. Aquantitythatdeterminestheguaranteesofouralgorithmsis d “
+(cid:107)Rpx˘q(cid:107)2
+1
+LR,x d
+(notetheuseoftheL norm). Weshowthatrotationswithhigh d valuesyieldbetterestimates.
+1 LR,x
+SharedRandomness. WeassumethatBuffyandAngelhaveaccesstosharedrandomness,e.g.,by
+agreeingonacommonPRNGseed. Sharedrandomnessisstudiedbothincommunicationcomplexity
+(e.g.,[16])andincommunicationreductioninmachinelearningsystems(e.g.,[2,7]). Inourcontext,
+itmeansthatBuffyandAngelcangeneratethesamerandomrotationswithoutcommunication.
+3 TheDRIVEAlgorithm
+We start by presenting DRIVE (Deterministically RoundIng randomly rotated VEctors), a novel
+1b-VectorEstimationalgorithm. Later,weextendDRIVEtothe1b-DistributedMeanEstimation
+2
+----- PAGE 3 -----
+Algorithm1 DRIVE
+Buffy: ` Angel: ` ˘
+1 2 : : C Se o n m d p ` u S te ,s R ig p n x p q, p S x . qq ˘ toAngel. z pxq 1 2 : : C Es o t m im p a u t t e e xp R z “ pxq“ ´1 S ` z ¨s p i x g q n ˘ . R pxq .
+R R R R
+problem. InDRIVE,BuffyusessharedrandomnesstosamplearotationmatrixR„ androtates
+thevectorxPRdbycom`puting pxq“˘Rx. BuffythencalculatesS,ascalarqua`nti R tyweexplain˘
+R
+below. Buffythensends S,signp pxqq toAngel. Aswediscusslater,sending S,signp pxqq
+requiresdp1`op1qqbits. Inturn, R Angelcomputes z pxq “ S¨signp pxqq P t´S,`Su d. R Itthen
+R R
+usesthesharedrandomnesstogeneratethesamerotationmatrixandemploystheinverserotation,
+z
+i.e.,estimatesxp“ ´1p pxqq. ThepseudocodeofDRIVEappearsinAlgorithm1.
+R R
+The properties of DRIVE depend on the rotation and the scale parameter S. We consider
+R
+both uniform rotations, that provide stronger guarantees, and structured rotations that are orders
+of magnitude faster to compute. As for the scale S “ Spx,Rq, its exact formula determines the
+characteristicsofDRIVE’sestimate, e.g., havingminimalvNMSEorbeingunbiased. Thelatter
+allowsustoapplyDRIVEtothe1b-DistributedMeanEstimation(Section4.2)andgetanNMSE
+thatdecreasesproportionallytothenumberofclients.
+We now prove a general result on the SSE of DRIVE that applies to any random rotation
+and any vector x P Rd. In the following sections, we use this result to obtain the vNMS R E
+whenconsideringspecificrotationsandscalingmethodsaswellasanalyzingtheirguarantees.
+Theorem1. TheSSEofDRIVEis: x´xp 2 “ x 2´2¨S¨ pxq `d¨S2.
+(cid:107) (cid:107)2 (cid:107) (cid:107)2 (cid:107)R (cid:107)1
+z
+Proof. TheSSEinestimating pxqusing pxqequalsthatofestimatingxusingxp. Therefore,
+x´xp 2 “ px´xpq 2 “ R pxq´ p R xpq 2 “ (cid:13) (cid:13) pxq´ z pxq (cid:13) (cid:13) 2
+(cid:107) (cid:107)2 (cid:107)R A(cid:107)2 (cid:107)R ER (cid:107)2 (cid:13) R R A (cid:13) 2 E
+“ pxq 2´2 pxq, z pxq ` (cid:13) (cid:13) z pxq (cid:13) (cid:13) 2 “ x 2´2 pxq, z pxq ` (cid:13) (cid:13) z pxq (cid:13) (cid:13) 2 . (1)
+(cid:107)R (cid:107)2 R R (cid:13) R (cid:13) 2 (cid:107) (cid:107)2 R R (cid:13) R (cid:13) 2
+Next,wehavethat,
+A E ř ř ` ˘
+pxq, z pxq “ d pxq ¨ z pxq “S¨ d pxq ¨sign pxq “S¨ pxq , (2)
+R R i“1R i R i i“1R i R i (cid:107)R (cid:107)1
+(cid:13) (cid:13) z pxq (cid:13) (cid:13) 2 “ ř d z pxq 2 “d¨S2. (3)
+(cid:13) R (cid:13) 2 i“1R i
+SubstitutingEq.(2)andEq.(3)inEq.(1)yieldstheresult.
+4 DRIVEWithaUniformRandomRotation
+Wefirstconsiderthethoroughlystudieduniformrandomrotation(e.g., [17,18,19,20,21]),which
+we denote by . The sampled matrix is denoted by R „ , that is, pxq “ R ¨x. An
+U U U U U
+R R R
+appealingpropertyofauniformrandomrotationisthat,asweshowlater,itadmitsascalingthat
+resultsinalowconstantvNMSEevenwithunbiasedestimates.
+4.1 1b-VectorEstimation
+UsingTheorem1,weobtainthefollowingresult. Theresultholdsforanyrotation,including .
+U
+R
+Lemma 1. For any x P Rd, DRIVE’s SSE is minimized by S “ (cid:107)Rpxq(cid:107) 1 (that is, S “ (cid:107)Rx(cid:107) 1 is
+d “ ‰ d
+determinedafterR„ issampled). ThisyieldsavNMSEof
+Er(cid:107)x´xp(cid:107)2
+2
+s
+“1´E d .
+R (cid:107)x(cid:107)2 2 LR,x
+Proof. ByTheorem1,tominimizetheSSEwerequire
+` ˘
+B x 2´2¨S¨ pxq `d¨S2 “´2¨ pxq `2¨d¨S “0,
+BS (cid:107) (cid:107)2 (cid:107)R (cid:107)1 (cid:107)R (cid:107)1
+3
+----- PAGE 4 -----
+leadingtoS “ (cid:107)Rpxq(cid:107) 1. Then,theSSEofDRIVEbecomes:
+d
+x´xp 2 “ x 2´2¨S¨ pxq `d¨S2 “ x 2´2¨ (cid:107)Rpxq(cid:107)2 1 `d¨ (cid:107)Rpxq(cid:107)2 1
+(cid:107) (cid:107)2 (cid:107) (cid:107)2 (cid:107)R (cid:107)1 (cid:107) (cid:107)2 `d ˘d2
+“ x 2´ (cid:107)Rpxq(cid:107)2 1 “ x 2´ (cid:107)x(cid:107)2 2 ¨(cid:107)Rpx˘q(cid:107)2 1 “ x 2 1´ (cid:107)Rpx˘q(cid:107)2 1 .
+(cid:107) (cid:107)2 d (cid:107) (cid:107)2 d (cid:107) (cid:107)2 d
+Thus,thenormalizedSSEis
+(cid:107)x´xp(cid:107)2
+2 “1´ d . Takingexpectationyieldstheresult.
+(cid:107)x(cid:107)2
+2
+LR,x
+Interestingly,fortheuniformrandomrotation, d followsthesamedistributionforallx. Thisis
+LRU,x
+because,bythedefinitionof ,itholdsthat px˘qisdistributeduniformlyovertheunitspherefor
+U U
+R R
+anyx. ThereforeDRIVE’svNMSEdependsonlyonthedimensiond. WenextanalyzethevNMSE
+attainablebythebestpossibleS,asgiveninLemma1,whenthealgorithmuses andisnotrequired
+U
+R
+tobeunbiased. Inparticular,westatethefollowingtheoremwhoseproofappearsinAppendixA.1
+(allappendicesappearintheSupplementaryMaterialandtheextendedpaperversion[22]).
+` ˘` ˘
+Theorem2. ForanyxPRd,thevNMSEofDRIVEwithS “ (cid:107)RUpxq(cid:107) 1 is 1´ 2 1´ 1 .
+d π d
+4.2 1b-DistributedMeanEstimation
+AnappealingpropertyofDRIVEwithauniformrandomrotation,establishedinthissection,isthat
+withaproperscalingparameterS,theestimateisunbiased. Thatis,foranyxPRd,ourscaleguaran-
+teesthatErxps“x. UnbiasednessisusefulwhengeneralizingtotheDistributedMeanEstimation
+problem.Intuitively,whennclientssendtheirvectors,anybiasedalgorithmwouldresultinanNMSE
+thatmaynotdecreasewithrespectton.Forexample,iftheyhavethesameinputvector,thebiaswould
+remainafteraveraging. Instead,anunbiasedencodingalgorithmhasthepropertythatwhenallclients
+act(e.g.,usedifferentPRNGseeds)independently,theNMSEdecreasesproportionallyto 1.
+n
+Another useful property of uniform random rotation is that its distribution is unchanged when
+composedwithotherrotations. Weuseitinthefollowingtheorem’sproof,giveninAppendixA.2.
+Theorem3. ForanyxPRd,setS “ (cid:107)x(cid:107)2 2 . ThenDRIVEsatisfiesErxps“x.
+(cid:107)RUpxq(cid:107)
+1
+Now,weproceedtoobtainvNMSEguaranteesforDRIVE’sunbiasedestimate.
+„ 
+Lemma2. ForanyxPRd,DRIVEwithS “ (cid:107)x(cid:107)2 2 hasavNMSEofE 1 ´1.
+(cid:107)RUpxq(cid:107)
+1
+Ld
+RU,x
+Proof. ByTheorem1,theSSEofthealgorithmsatisfies:
+˜ ¸
+(cid:107)x(cid:107)2 (cid:107)x(cid:107)2 2
+(cid:107)x(cid:107)2 2 ´2¨S¨(cid:107)R U ¨x(cid:107) 1 `d¨S2 “(cid:107)x(cid:107)2 2 ´2¨ (cid:107)R U ¨ 2 x(cid:107) 1 ¨(cid:107)R U ¨x(cid:107) 1 `d¨ (cid:107)R U ¨ 2 x(cid:107) 1
+˜ ¸ ˜˜ ¸ ¸
+(cid:107)x(cid:107)2 2 (cid:107)x(cid:107)2 d
+“d¨ 2 ´(cid:107)x(cid:107)2 “d¨ 2 ´(cid:107)x(cid:107)2 “(cid:107)x(cid:107)2¨ ´1 .
+(cid:107)x(cid:107) 2 (cid:107)R U ¨x˘(cid:107) 1 2 (cid:107)R U ¨x˘(cid:107)2 1 2 2 (cid:107)R U ¨x˘(cid:107)2 1
+Normalizingby x 2andtakingexpectationoverR concludestheproof.
+(cid:107) (cid:107)2 U
+Ourgoalistoderiveanupperboundontheaboveexpressionandthusupper-boundthevNMSE.
+Mostimportantly,weshowthateventhoughtheestimateisunbiasedandweuseonlyasinglebitper
+coordinate,thevNMSEdoesnotincreasewiththedimensionandisboundedbyasmallconstant. In
+particular,inAppendixA.3,weprovethefollowing:
+Theorem4. ForanyxP Rd,thevNMSEofDRIVEwithS “ (cid:107)x(cid:107)2 2 satisfies:
+(cid:107)RUpxq(cid:107)
+1
+b
+piqForalldě2,itisatmost2.92. piiqForalldě135,itisatmost π ´1` p6π3´12π2q¨lnd`1.
+2 d
+ThistheoremyieldsstrongboundsonthevNMSE.Forexample, thevNMSEislowerthan1for
+dě4096andlowerthan0.673fordě105. Finally,weobtainthefollowingcorollary,
+Corollary1. ForanyxPRd,thevNMSEtendsto π ´1«0.571asdÑ8.
+2
+4
+----- PAGE 5 -----
+Recall that DRIVE’s above scale S is a function of both x and the sampled R . An alternative
+U
+approachistodeterministicallysetS to
+(cid:107)x(cid:107)2
+2 . AsweproveinAppendixA.4,theresulting
+Er(cid:107)RUpxq(cid:107)
+1
+s
+scaleis
+(cid:107)x(cid:107)
+2
+¨pd´1q¨Bp1
+2
+,d´
+2
+1q,whereBistheBetafunction.
+Interestingly,thisscalenolongerdepends
+2d
+onxbutonlyonitsnorm. Intheappendix,wealsoprovethattheresultingvNMSEisboundedby
+π ´1foranyd. Inpractice,wefindthatthebenefitismarginal.
+2
+Finally,withavNMSEguaranteefortheunbiasedestimatebyDRIVE,weobtainthefollowingkey
+resultforthe1b-DistributedMeanEstimationproblem,whoseproofappearsinAppendixA.5. We
+notethatthisresultguarantees(e.g.,see[23])thatdistributedSGD,wheretheparticipants’gradients
+arecompressedwithDRIVE,convergesatthesameasymptoticrateaswithoutcompression.
+Theorem5. Assumenclients, eachwithitsownvectorx PRd. Leteachclientindependently
+pcq
+sample R U,c „ U and set its scale to (cid:107) x pcq(cid:107) 2 2 . Then, the server average estimate’s NMSE
+R
+(cid:107)
+RU,c¨x pcq(cid:107)1
+satisfies:
+Er(cid:107)
+ř
+xavg´xy avg(cid:107)2
+2
+s
+“vNMSE,wherevNMSEisgivenbyLemma2andisboundedbyTheorem4.
+n 1¨ n c“1(cid:107) x pcq(cid:107) 2 2 n
+Tothebestofourknowledge,DRIVEisthefirstalgorithmwithaprovableNMSEofOp1qforthe
+n
+1b - Distributed Mean Estimation problem (i.e., with dp1`op1qq bits). In practice, we use only
+d`Op1qbitstoimplementDRIVE. Weusethedp1`op1qqnotationtoensurecompatibilitywith
+thetheoreticalresults;seeAppendixBforadiscussion.
+5 ReducingthevNMSEwithDRIVE`
+ToreducethevNMSEfurther,weintroducetheDRIVE`algorithm. InDRIVE`,wealsouseascale
+parameter, denotedS` “ S`px,RqtodifferentiateitfromthescaleS ofDRIVE. Here, instead
+z
+of reconstructing the rotated vector in a symmetric manner, i.e., pxq P S ¨t´1,1ud, we have
+z R
+that pxqPS`¨tc ,c ud wherec ,c arecomputedusingK-MeansclusteringwithK “2over
+1 2 1 2
+R
+thedentriesoftherotatedvector pxq. Thatis, c ,c arechosentominimizetheSSEoverany
+1 2
+R
+choice of two values. This does not increase the (asymptotic) time complexity over the random
+rotations considered in this paper as solving K-Means for the special case of one-dimensional
+data is deterministically solvable in Opdlogdq (e.g., [24]). Notice that DRIVE` still requires
+dp1`op1qqbitsaswecommunicatepS`¨c ,S`¨c qandasinglebitpercoordinate,indicating
+1 2
+itsnearestcentroid. WedeferthepseudocodeandanalysesofDRIVE` toAppendixC.Weshow
+thatwithproperscaling,forboththe1b-VectorEstimationand1b-DistributedMeanEstimation
+problems,DRIVE`yieldsguaranteesthatareatleastasstrongasthoseofDRIVE.
+6 DRIVEwithaStructuredRandomRotation
+Uniform random rotation generation usually relies on QR factorization (e.g., see [25]), which
+requires Opd3q time and Opd2q space. Therefore, uniform random rotation can only be used in
+practicetorotatelow-dimensionalvectors. Thisisimpracticalforneuralnetworkarchitectureswith
+manymillionsofparameters. Tothatend,wecontinuetoanalyzeDRIVEandDRIVE` withthe
+(randomized)Hadamardtransform,a.k.a. structuredrandomrotation[2,26],thatadmitsafastin-
+place,parallelizable,Opdlogdqtimeimplementation[27,28,29]. Westartwithafewdefinitions.
+Definitiˆon1. TheWalsh-H˙adamardmatrix([30])H
+2k
+Pt`1,´1u2kˆ2k isrecursivelydefinedvia:
+H H
+H
+2k
+“
+H 2
+2
+k
+k
+´
+´
+1
+1
+´H
+2
+2
+k
+k
+´
+´
+1
+1
+andH
+1
+“p1q. Also,p?1
+d
+Hq¨p?1
+d
+HqT“I anddetp?1
+d
+HqPr´1,1s.
+Definition2. LetR H denotetherotationmatrix H ? D PRdˆd,whereH isaWalsh-Hadamardmatrix
+d
+andD isadiagonalmatrixwhosediagonalentriesarei.i.d. Rademacherrandomvariables(i.e.,
+takingvaluesuniformlyin˘1). Then
+R H
+pxq“R
+H
+¨x“ ?1
+d
+H ¨px
+1
+¨D
+11
+,...,x
+d
+¨D
+dd
+qT isthe
+randomizedHadamardtransformofxand ´1pxq“RT ¨x“ D ? H ¨xistheinversetransform.
+RH H d
+5
+----- PAGE 6 -----
+6.1 1b-VectorEstimation
+“ ‰
+Recall that the vNMSE of DRIVE, when minimized using S “ (cid:107)Rpxq(cid:107) 1, is 1´E d (see
+d LR,x
+Lemma1). WenowboundthisquantityofDRIVEwithastructuredrandomrotation.
+Lemma3. Foranydimensiond ě 2andvectorx “P Rd,th ‰ evNMSEofDRIVEwithastructured
+randomrotationandscaleS “ (cid:107)RHpxq(cid:107) 1 is: 1´E d ď 1.
+d LRH,x 2
+“ˇř ˇ‰
+Proof. Observethatforalli,Er| R H pxq i |s“E ˇ d j“1 ? xj d H ij D jj ˇ . SincetH ij D jj |j Prdsuare
+i.i.d. RademacherrandomvariableswecanusetheKhintchineinequality[31,32]whichimpliesthat
+?1
+2d
+¨
+(cid:107)
+x
+(cid:107)2“
+ďEr|
+R‰ H
+pxq
+i
+|sď
+”
+?1
+d
+¨
+(cid:107)
+x
+(cid:107)2ı
+(see[33,34]forsimplifiedproo
+ř
+fs). Weconcludethat:
+E
+L
+d
+RH,x
+“
+d
+1 ¨E
+(cid:107)R H
+px˘q
+(cid:107)
+2
+1
+ě
+d
+1 ¨Er
+(cid:107)R H
+px˘q
+(cid:107)1
+s2 ě
+d
+1 ¨p d
+i“1
+?1
+2d
+q2 “ 1
+2
+.
+Thisboundissharpsincefordě2wehavethat d “ 1 forx“p?1 ,?1 ,0,...,0qT .
+LRH,x 2 2 2
+“ ‰
+Observethatunlikefortheuniformrandomrotation,E d dependsonx. Wealsonotethatthis
+LRH,x
+boundof 1 appliestoDRIVE`(withscaleS` “1)asweshowinAppendixC.2.
+2
+6.2 1b-DistributedMeanEstimation
+ForanarbitraryxPRd and ,andinparticularfor ,theestimatesofDRIVEcannotbemade
+H
+unbiased. For example, for R x “ p2,1qT we have R that signp pxqq “ pD ,D qT and thus
+{ 3 3 { R H 11 11
+R? H
+pxq“S¨pD
+11
+,D
+1 ? 1
+qT. Thisimpliestha
+?
+txp“
+R
+´
+H
+1p
+R H
+pxqq“ ?1
+2
+¨D¨H¨S¨pD
+11
+,D
+11
+qT “
+2¨S¨D¨pD ,0qT “ 2¨S¨pD2 ,0qT “p 2¨S,0qT.Therefore,Erxps‰xregardlessofthescale.
+11 11
+Nevertheless, we next provide evidence for why when the input vector is high dimensional and
+admitsfinitemoments,astructuredrandomrotationperformssimilarlytoauniformrandomrotation,
+yieldingalltheappealingaforementionedproperties. Indeed,itisacommonobservationthatthe
+distributionofmachinelearningworkloadsand,inparticular,neuralnetworkgradientsaregoverned
+bysuchdistributions(e.g.,lognormal[35]ornormal[36,37]).
+Weseektoshowthatathighdimensions,thedistributionof pxqissufficientlysimilartothatof
+H
+R
+pxq. Bydefinition,thedistributionof pxqisthatofauniformlyatrandomdistributedpoint
+U U
+R R
+onasphere. Previousstudiesofthisdistributionforhighdimensions(e.g.,[38,39,40,41])have
+shownthatindividualcoordinatesof pxqconvergetothesamenormaldistributionandthatthese
+U
+R
+coordinatesare“weakly”dependentinthesensethatthejointdistributionofeveryOp1q-sizedsubset
+ofcoordinatesissimilartothatofindependentnormalvariablesforlarged.
+We hereafter assume that x “ px ,...,x q, where the x s are i.i.d. and that Erx2s “ σ2 and
+1 d i j
+Er|x |3s“ρă8forallj. Weshowthat pxq convergestothesamenormaldistributionforalli.
+j H i
+R
+LetF pxqbethecumulativedistributionfunction(CDF)of 1¨ pxq andΦbetheCDFofthestan-
+i,d σ R H i
+dardnormaldistribution. Thefollowinglemma,proveninAppendixD.1,showstheconvergence.
+Lemma4. Foralli, R H pxq i convergestoanormalvariable: sup xPR|F i,d pxq´Φpxq|ď 0 σ .4 3 0 ? 9 d ¨ρ.
+Withthisresult,wecontinuetolayoutevidenceforthe“weakdependency”amongthecoordinates.
+Wedosobycalculatingthemomentsoftheirjointdistributioninincreasingsubsetsizesshowing
+thatthesemomentsconvergetothoseofindependentnormalvariables. Previousworkhasshown
+thatastructuredrandomrotationonvectorswithspecificdistributionsresultsin“weaklydependent”
+normalvariables. Thislineofresearch[42,43,44]utilizedtheHadamardtransformforadifferent
+purpose.Theirgoalwastodevelopacomputationallycheapmethodtogenerateindependentnormally
+distributedvariablesfromsimpler(e.g.,uniform)distributions. Weapplytheiranalysistooursetting.
+WepartiallyrelyonthefollowingobservationthattheHadamardmatrixsatisfies.
+Observation1. ([42])TheHadamardproduct(coordinate-wiseproduct),H ˝H ,oftworows
+xiy x(cid:96)y
+H ,H intheHadamardmatrixyieldsanotherrowatthematrixH ˝H “H .
+xiy x(cid:96)y xiy x(cid:96)y x1`pi´1q‘p(cid:96)´1qy
+Here,pi´1q‘p(cid:96)´1qisthebitwisexoroftheplogdq-sizedbinaryrepresentationofpi´1qand
+ř ř ř
+p(cid:96)´1q. Itfollowsthat d H H “ d pH ˝H q “ d H .
+j“1 ij (cid:96)j j“1 xiy x(cid:96)y j j“1 1`pi´1q‘p(cid:96)´1q,j
+6
+----- PAGE 7 -----
+0.10
+0.05
+0.00
+25 28 211
+Dimension
+ESMNlaciripmE )stneilc01=n(
+Normal(0,1) Lognormal(0,1) Exponential(1)
+0.10 0.10
+0.05 0.05
+0.00 0.00
+25 28 211 25 28 211
+Dimension Dimension
+DRIVE(Hadamard) DRIVE+(Hadamard) (π/2 1)/10 0.0571 DRIVE(Uniform) DRIVE+(Uniform)
+− ≈
+Figure1: Distributedmeanestimationcomparison: eachdatapointisaveragedover104 trials. In
+eachtrial,thesame(randomlysampled)vectorissentbyn“10clients.
+Wenowanalyzethemomentsoftherotatedvariables,startingwiththefollowingobservation. It
+followsfromthesign-symmetryofDandmatchesthejointdistributionofi.i.d. normalvariables.
+Observation2. Alloddmomentscontaining H px“qentriesare0. Thatis, ‰
+@q PN,@i ,...,i Pt1,...,d R u:E pxq ¨...¨ pxq “0.
+1 2q`1
+R
+H i1
+R
+H i2q`1
+Therefore,weneedtoexamineonlyevenmoments. Westartwithshowingthatthesecondmoments
+alsomatchwiththedistributionofindependentnormalvariables.
+“ ‰
+Lemma5. Foralli‰(cid:96)itholdsthatErp ¨xq ¨p ¨xq s“0,whereasE p ¨xq2 “σ2.
+R H i R H (cid:96) R H i
+“ ‰
+Proof. Since tD |j Pt1,...,duu are sign-symmetric and i.i.d., E p ¨xq ¨p ¨xq “
+“ ř jj ř ‰ “ ‰ ř R H i řR H (cid:96)
+E 1p d x H D q¨p d x H D q “E x2 ¨1¨ d H H .Noticethat d H “d
+d řj“1 j ij jj j“1 j (cid:96)j jj j d j“1 ij (cid:96)j j“1 1j
+and d H “0forallią1. Thus,byObservation1weget0ifi‰(cid:96)andσ2otherwise.
+j“1 ij
+Wehaveestablishedthatthecoordinatesarepairwiseuncorrelated.Similarbutmoreinvolvedanalysis
+showsthatthesametrendcontinuesundertheassumptionoftheexistenceofx’shighermoments.
+InAppendixD.2weanalyzethe4thmomentsshowingthattheyindeedapproachthe4thmoments
+ofindependentnormalvariableswitharateof 1;thereaderisreferredto[42]forfurtherintuition
+d
+andhighermomentsanalysis. WethereforeexpectthatusingDRIVEandDRIVE`withHadamard
+transformwillyieldsimilarresultstothatofauniformrandomrotationathighdimensionsandwhen
+theinputvectorsrespectthefinitemomentsassumption.
+Inadditiontothetheoreticalevidence,inFigure1,weshowexperimentalresultscomparingthemea-
+suredNMSEforthe1b-DistributedMeanEstimationproblemwithn“10clients(allgiventhesame
+vectorsobiasesdonotcancelout)forDRIVEandDRIVE`usingbothuniformandstructuredrandom
+rotationsoverthreedifferentdistributions. TheresultsindicatethatallvariantsyieldsimilarNMSEs
+inreasonabledimensions,inlinewiththetheoreticalguaranteeofCorollary1andTheorem5.
+7 Evaluation
+WeevaluateDRIVEandDRIVE`,comparingthemtostandardandrecentstate-of-the-arttechniques.
+Weconsiderclassicdistributedlearningtasksaswellasfederatedlearningtasks(e.g.,wherethedata
+distributionisnoti.i.d. andclientsmaychangeovertime). Allthedistributedtasksareimplemented
+overPyTorch[45]andallthefederatedtasksareimplementedoverTensorFlowFederated[46]. We
+focusourcomparisononvectorquantizationalgorithmsandrecentsketchingtechniquesandexclude
+sparsificationmethods(e.g.,[47,48,49,50])andmethodsthatinvolveclient-sidememorysince
+thesecanoftenworkinconjunctionwithouralgorithms.
+Datasets. WeuseMNIST[51,52],EMNIST[53],CIFAR-10andCIFAR-100[54]forimageclas-
+sificationtasks;anext-character-predictiontaskusingtheShakespearedataset[55];andanext-word-
+predictiontaskusingtheStackOverflowdataset[56]. AdditionaldetailsappearinAppendixE.1.
+Algorithms. Sinceourfocusisonthedistributedmeanestimationproblemanditsfederatedand
+distributedlearningapplications,werunDRIVEandDRIVE`withtheunbiasedscalequantities.1
+Wecompareagainstseveralalternativealgorithms: (1)FedAvg[1]thatusesthefullvectors(i.e.,each
+coordinateisrepresentedusinga32-bitfloat);(2)Hadamardtransformfollowedby1-bitstochastic
+7
+----- PAGE 8 -----
+Hadamard Kashin Drive Drive` Drive Drive`
+Dimension(d)
++1-bitSQ +1-bitSQ (Uniform) (Uniform) (Hadamard) (Hadamard)
+128 0.5308,0.34 0.2550,2.12 0.0567,40.4 0.0547,40.7 0.0591,0.36 0.0591,0.72
+8,192 1.3338,0.57 0.3180,3.42 0.0571,5088 0.0571,5101 0.0571,0.60 0.0571,1.06
+524,288 2.1456,0.79 0.3178,4.69 — — 0.0571,0.82 0.0571,1.35
+33,554,432 2.9332,27.1 0.3179,332 — — 0.0571,27.2 0.0571,37.8
+Table1: EmpiricalNMSEandaverageper-vectorencodingtime(inmilliseconds,onanRTX3090
+GPU)fordistributedmeanestimationwithn“10clients(sameasinFigure1)andLognormal(0,1)
+distribution. Eachentryisa(NMSE,time)tupleandthemostaccurateresultishighlightedinbold.
+quantization(SQ)[2,10];(3)Kashin’srepresentationfollowedby1-bitstochasticquantization[11];
+(4)TernGrad[8],whichclipscoordinateslargerthan2.5timesthestandarddeviation,thenperforms
+1-bitstochasticquantizationontheabsolutevaluesandseparatelysendstheirsignsandthemaximum
+coordinateforscale(wenotethatTernGradisalow-bitvariantofawell-knownalgorithmcalled
+QSGD [9], and we use TernGrad since we found it to perform better in our experiments);2 and
+(5-6)Sketched-SGD[57]andFetchSGD[58],whicharebothcount-sketch[59]basedalgorithms
+designedfordistributedandfederatedlearning,respectively.
+WenotethatHadamardwith1-bitstochasticquantizationisourmostfaircomparison,asitusesthe
+samenumberofbitsasDRIVE`(andslightlymorethanDRIVE)andhassimilarcomputationalcosts.
+ThiscontrastswithKashin’srepresentation,whereboththenumberofbitsandthecomputational
+costsarehigher. Forexample,astandardTensorFlowFederatedimplementation(e.g.,see“CLASS
+KASHINHADAMARDENCODINGSTAGE” hyperparameters at [60]) uses a minimum of 1.17 bits
+percoordinate,andthreeiterationsofthealgorithmresultinginfiveHadamardtransformsforeach
+vector. Also,notethatTernGradusesanextrabitpercoordinateforsendingthesign. Moreover,
+theclippingperformedbyTernGradisaheuristicprocedure,whichisorthogonaltoourwork.
+Foreachtask,weuseasubsetofdatasetsandthemostrelevantcompetition. Detailedconfiguration
+information and additional results appear in Appendix E. We first evaluate the vNMSE-Speed
+tradeoffsandthenproceedtofederatedanddistributedlearningexperiments.
+vNMSE-SpeedTradeoff. AppearinginTable1,theresultsshowthatouralgorithmsofferthe
+lowestNMSEandthatthegapincreaseswiththedimension. Asexpected,DRIVEandDRIVE`
+withuniformrotationaremoreaccurateforsmalldimensionsbutaresignificantlyslower. Similarly,
+DRIVEisasaccurateasDRIVE`,andbotharesignificantlymoreaccuratethanKashin(byafactor
+of 4.4ˆ-5.5ˆ) and Hadamard (9.3ˆ-51ˆ) with stochastic quantization. Additionally, DRIVE is
+5.7ˆ-12ˆfasterthanKashinandaboutasfastasHadamard. InAppendixE.3wediscusstheresults,
+givethecompleteexperimentspecification,andprovidemeasurementsonacommoditymachine.
+Wenotethattheabovetechniques,includingDRIVE,aremorecomputationallyexpensivethanlinear-
+timesolutionslikeTernGrad. Nevertheless,DRIVE’scomputationaloverheadbecomesinsignificant
+for modern learning tasks. For example, our measurements suggest that it can take 470 ms for
+computingthegradientonaResNet18architecture(forCIFAR100,batchsize=128,usingNVIDIA
+GeForceGTX1060(6GB)GPU)whiletheencodingofDRIVE(Hadamard)takes2.8ms. Thatis,
+theoverallcomputationtimeisonlyincreasedby0.6%whiletheerrorreducessignificantly. Taking
+the transmission and model update times into consideration would reduce the importance of the
+compressiontimefurther.
+FederatedLearning. Weevaluateoverfourtasks: (1)EMNISTovercustomizedCNNarchitec-
+turewithtwoconvolutionallayerswith«1.2M parameters[61];(2)CIFAR-100overResNet-18[54]
+;(3)anext-character-predictiontaskusingtheShakespearedataset[1];(4)anext-word-predictiontask
+usingtheStackOverflowdataset[62].Both(3)and(4)useLSTMrecurrentmodels[63]with«820K
+and«4M parameters,respectively. Weusecode,clientpartitioning,models,hyperparameters,and
+validationmetricsfromthefederatedlearningbenchmarkof[62].
+1ForDRIVEthescaleisS “ (cid:107)x(cid:107)2 2 (seeTheorem3). ForDRIVE` thescaleisS` “ (cid:107)x(cid:107)2 2,where
+(cid:107)Rpxq(cid:107)1 (cid:107)c(cid:107)2
+2
+cPtc
+1
+,c 2udisthevectorindicatingthenearestcentroidtoeachcoordinateinRpxq(seeSection5).
+2Whenrestrictedtotwoquantizationlevels,TernGradisidenticaltoQSGD’smaxnormalizationvariantwith
+clipping(slightlybetterduetotheabilitytorepresent0).
+8
+----- PAGE 9 -----
+.5
+.25
+0
+2000 4000 6000
+ycaruccA
+CIFAR-100 EMNIST Shakespeare StackOverflow
+.85 .58 .25
+.75 .5 .175
+.65
+.42 .1
+500 1000 1500 400 800 1200 500 1000 1500
+.5
+.48
+.46
+5960 5980 6000
+ycaruccA
+.25
+.848 .565
+.24
+.845 .555
+.842 .545 .23
+1460 1480 1500 1160 1180 1200 1460 1480 1500
+FedAvg(32-bitfloats) TernGrad FetchSGD Hadamard+1-bitSQ
+Kashin+1-bitSQ Drive(Hadamard) Drive+(Hadamard)
+Figure2: Accuracyperroundonvariousfederatedlearningtasks. Smoothingisdoneusingarolling
+meanwithawindowsizeof150. Thesecondrowzooms-inonthelast50rounds.
+1.0
+.75
+.5
+0 75 150
+ycaruccA
+CIFAR-10 CIFAR-10-ZoomIn CIFAR-100 CIFAR-100-ZoomIn
+.75
+.7
+.9
+.5
+.65
+.85 .25
+.6
+100 125 150 0 125 250 200 225 250
+Mini-batchSGD(32-bitfloats) TernGrad Sketched-SGD Hadamard+1-bitSQ
+Kashin+1-bitSQ Drive(Hadamard) Drive+(Hadamard)
+Figure3: Accuracyperroundondistributedlearningtasks,withazoom-inonthelast50rounds.
+The results are depicted in Figure 2. We observe that in all tasks, DRIVE and DRIVE` have
+accuracy that is competitive with that of the baseline, FedAvg. In CIFAR-100, TernGrad and
+DRIVE provide the best accuracy. For the other tasks, DRIVE and DRIVE` have the best ac-
+curacy, while the best alternative is either Kashin + 1-bit SQ or TernGrad, depending on the
+task. Hadamard + 1-bit SQ, which is the most similar to our algorithms (in terms of both band-
+widthandcompute),providesloweraccuracyinalltasks. Additionaldetailsandhyperparameter
+configurationsarepresentedinAppendixE.4.
+DistributedCNNTraining. WeevaluatedistributedCNNtrainingwith10clientsintwocon-
+figurations: (1)CIFAR-10datasetwithResNet-9;(2)CIFAR-100withResNet-18[54,64]. Inboth
+tasks,DRIVEandDRIVE`havesimilaraccuracytoFedAvg,closelyfollowedbyKashin+1-bitSQ.
+Theotheralgorithmsarelessaccurate,withHadamard+1-bitSQbeingbetterthanSketched-SGD
+andTernGradforbothtasks. Additionaldetailsandhyperparameterconfigurationsarepresentedin
+AppendixE.5. Figure3depictstheresults.
+Evaluation Summary. Overall, it is evident that DRIVE and DRIVE` consistently offer
+markedlyfavorableresultsincomparisontothealternativesinoursetting. Kashin’srepresentation
+appearstoofferthebestcompetition,albeitatsomewhathighercomputationalcomplexityandband-
+widthrequirements. Thelesserperformanceofthesketch-basedtechniquesisattributedtothehigh
+noiseofthesketchundersuchalow(dp1`op1qqbits)communicationrequirement.Thisisbecausethe
+numberofcounterstheycanuseistoolow,makingtoomanycoordinatesmapintoeachcounter.In
+AppendixE.6,wealsocompareDRIVEandDRIVE`tostateofthearttechniquesoverK-Means
+andPowerIterationtasksfor10,100,and1000clients,yieldingsimilartrends.
+8 Discussion
+Proven Error Bounds. We summarize the proven error bounds in Table 2. Since DRIVE
+(Hadamard)isgenerallynotunbiased(asdiscussedinSection6.2),wecannotestablishaformalguar-
+anteeforthe1b-DMEproblemwhenusingHadamard. Itisachallengingresearchquestionwhether
+thereexistsotherstructuredrotationswithlowcomputationalcomplexityandstrongerguarantees.
+9
+----- PAGE 10 -----
+Scale Rotation
+Problem S Uniform Hadamard
+` ˘` ˘
+1b-VE (cid:107)Rp d xq(cid:107) 1 vNMSE“ 1´ π 2 1ˆ´ d 1 b ˙ vNMSEď 1 2
+1b-DME (cid:107)x(cid:107)2 2 NMSEď 1 ¨2.92; dě135 ùñ NMSEď 1 ¨ π´1` p6π3´12π2q¨lnd`1 —
+(cid:107)Rpxq(cid:107) 1 n n 2 d
+Table2: SummaryoftheprovenerrorboundsforDRIVE.
+InputDistributionAssumption. ThedistributedmeanestimationanalysisofourHadamard-
+basedvariantsisbasedonanassumption(Section6.2)aboutthevectordistributions. Whilemachine
+learningworkloads,andDNNgradientsinparticular(e.g.,[35,36,37]),wereobservedtofollow
+suchdistributions,thisassumptionmaynotholdforotherapplications.
+Forsuchcases,wenotethatDRIVEiscompatiblewiththeerrorfeedback(EF)mechanism[65,66]
+thatensuredconvergenceandrecoveryoftheconvergencerateofnon-compressedSGD.Specifically,
+asevidentbyLemma3,anyscale (cid:107)Rpxq(cid:107) 1 ďS ď2¨ (cid:107)Rpxq(cid:107) 1 issufficienttorespectthecompressor
+d d
+(i.e.,boundedvariance)assumption. Forcompleteness,inAppendixE.2,weperformEFexperiments
+comparingDRIVEandDRIVE`toothercompressiontechniquesthatuseEF.
+Varying Communication Budget. Unlike some previous works, our algorithms’ guarantees
+withmorethanonebitpercoordinatearenotestablished. Itisthusaninterestingfutureworkto
+extendDRIVEtoothercommunicationbudgetsandunderstandwhataretheresultingguarantees.
+Wereferthereaderto[67]forinitialstepstowardsthatdirection.
+EntropyEncoding. Entropyencodingmethods(suchasHuffmancoding)canfurthercompress
+vectorsofvalueswhenthevaluesarenotuniformlydistributed. WehavecomparedDRIVEagainst
+stochasticquantizationmethodsusingentropyencodingforthechallengingsettingforDRIVEwhere
+allvectorsarethesame(seeTable1forfurtherdescription). TheresultsappearinAppendixE.7,
+whereDRIVEstilloutperformsthesemethods. Wealsonotethat,whencomputationallowsand
+whenusingDRIVEwithmultiplebitsperentry,DRIVEcanalsobeenhancedbyentropyencoding
+techniques. Wedescribesomeinitialresultsforthissettingin[67].
+Structured Data. When the data is highly sparse, skewed, or otherwise structured, one can
+leveragethatforcompression. Wenotethatsometechniquesthatexploitsparsityorstructurecanbe
+useinconjunctionwithourtechniques.Forexample,onemaytransmitonlynon-zeroentriesorTop-K
+entrieswhilecompressingtheseusingDRIVEtoreducecommunicationoverheadevenfurther.
+CompatibilityWithDistributedAll-ReduceTechniques. Quantizationtechniques,including
+DRIVE,mayintroduceoverheadsinthecontextofAll-Reduce(dependingonthenetworkarchitecture
+and communication patterns). In particular, if every node in a cluster uses a different rotation,
+DRIVEwillnotallowforefficientin-pathaggregationwithoutdecodingthevectors. Further,the
+computationaloverheadofthereceiverincreasesbyalogdfactoraseachvectorhastobedecoded
+separatelybeforeanaveragecanbecomputed. ItisaninterestingfuturedirectionforDRIVEto
+understandhowtominimizesuchpotentialoverheads. Forexample,onecanconsiderbucketizing
+co-locatedworkersandapplyDRIVE’squantizationonlyforcross-racktraffic.
+9 Conclusions
+Inthispaper,westudiedthevectoranddistributedmeanestimationproblems. Theseproblemsare
+applicabletodistributedandfederatedlearning,whereclientscommunicatereal-valuedvectors(e.g.,
+gradients)toaserverforaveraging. Tothebestofourknowledge,ouralgorithmsarethefirstwith
+aprovableerrorofOp1qforthe1b-DistributedMeanEstimationproblem(i.e.,withdp1`op1qq
+n
+bits). Asshownin[14],anyalgorithmthatusesOpdqsharedrandombits(e.g.,ourHadamard-based
+variant)hasavNMSEofΩp1q, i.e., DRIVEandDRIVE` areasymptoticallyoptimal; additional
+discussionisgiveninAppendixF.Ourexperiments,carriedovervarioustasksanddatasets,indicate
+thatouralgorithmsimproveoverthestateoftheart. Alltheresultspresentedinthispaperarefully
+reproduciblebyoursourcecode,availableat[29].
+10
+----- PAGE 11 -----
+AcknowledgmentsandDisclosureofFunding
+MMwassupportedinpartbyNSFgrantsCCF-2101140,CCF-2107078,CCF-1563710,andDMS-
+2023528. MMandRBBweresupportedinpartbyagifttotheCenterforResearchonComputation
+andSocietyatHarvardUniversity. APwassupportedinpartbytheCyberSecurityResearchCenter
+atBen-GurionUniversityoftheNegev. WethankMosheGabel,MahmoodSharif,YuvalFilmusand,
+theanonymousreviewersforhelpfulcommentsandsuggestions.
+References
+[1] H. Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Agüera
+yArcas. Communication-EfficientLearningofDeepNetworksfromDecentralizedData. In
+ArtificialIntelligenceandStatistics,pages1273–1282,2017.
+[2] AnandaTheerthaSuresh,XYuFelix,SanjivKumar,andHBrendanMcMahan. Distributed
+Mean Estimation With Limited Communication. In International Conference on Machine
+Learning,pages3329–3337.PMLR,2017.
+[3] YuvalAlfassi,MosheGabel,GalYehuda,andDanielKeren. ADistance-BasedSchemefor
+ReducingBandwidthinDistributedGeometricMonitoring. In2021IEEE37thInternational
+ConferenceonDataEngineering(ICDE),2021.
+[4] JeffreyDean,GregCorrado,RajatMonga,KaiChen,MatthieuDevin,MarkMao,Marc'aurelio
+Ranzato, Andrew Senior, Paul Tucker, Ke Yang, Quoc Le, and Andrew Ng. Large Scale
+DistributedDeepNetworks. InF.Pereira,C.J.C.Burges,L.Bottou,andK.Q.Weinberger,
+editors,AdvancesinNeuralInformationProcessingSystems,volume25.CurranAssociates,
+Inc.,2012.
+[5] MohammadShoeybi,MostofaPatwary,RaulPuri,PatrickLeGresley,JaredCasper,andBryan
+Catanzaro. Megatron-lm: Training multi-billion parameter language models using model
+parallelism. arXivpreprintarXiv:1909.08053,2019.
+[6] Yanping Huang, Youlong Cheng, Ankur Bapna, Orhan Firat, Dehao Chen, Mia Chen, Hy-
+oukJoongLee,JiquanNgiam,QuocVLe,YonghuiWu,andzhifengChen. GPipe: Efficient
+TrainingofGiantNeuralNetworksusingPipelineParallelism. InH.Wallach,H.Larochelle,
+A.Beygelzimer,F.d'Alché-Buc,E.Fox,andR.Garnett,editors,AdvancesinNeuralInformation
+ProcessingSystems,volume32.CurranAssociates,Inc.,2019.
+[7] Ran Ben-Basat, Michael Mitzenmacher, and Shay Vargaftik. How to Send a Real Number
+UsingaSingleBit(andSomeSharedRandomness). arXivpreprintarXiv:2010.02331,2020.
+[8] WeiWen,CongXu,FengYan,ChunpengWu,YandanWang,YiranChen,andHaiLi.TernGrad:
+TernaryGradientstoReduceCommunicationinDistributedDeepLearning. InAdvancesin
+neuralinformationprocessingsystems,pages1509–1519,2017.
+[9] Dan Alistarh, Demjan Grubic, Jerry Li, Ryota Tomioka, and Milan Vojnovic. QSGD:
+Communication-Efficient Sgd via Gradient Quantization and Encoding. Advances in Neu-
+ralInformationProcessingSystems,30:1709–1720,2017.
+[10] JakubKonecˇny` andPeterRichtárik. RandomizedDistributedMeanEstimation: Accuracyvs.
+Communication. FrontiersinAppliedMathematicsandStatistics,4:62,2018.
+[11] SebastianCaldas,JakubKonecˇný,HBrendanMcMahan,andAmeetTalwalkar. Expanding
+theReachofFederatedLearningbyReducingClientResourceRequirements. arXivpreprint
+arXiv:1812.07210,2018.
+[12] YouhuiBai,ChengLi,QuanZhou,JunYi,PingGong,FengYan,RuichuanChen,andYinlong
+Xu. Gradientcompressionsuperchargedhigh-performancedataparalleldnntraining. InThe
+28thACMSymposiumonOperatingSystemsPrinciples(SOSP2021),2021.
+[13] YuriiLyubarskiiandRomanVershynin. UncertaintyPrinciplesandVectorQuantization. IEEE
+TransactionsonInformationTheory,56(7):3491–3501,2010.
+11
+----- PAGE 12 -----
+[14] MherSafaryan,EgorShulgin,andPeterRichtárik. UncertaintyPrincipleforCommunication
+CompressioninDistributedandFederatedLearningandtheSearchforanOptimalCompressor.
+arXivpreprintarXiv:2002.08958,2020.
+[15] PeterDavies,VijaykrishnaGurunanthan,NiushaMoshrefi,SalehAshkboos,andDanAlistarh.
+New Bounds For Distributed Mean Estimation and Variance Reduction. In International
+ConferenceonLearningRepresentations,2021.
+[16] IlanNewman. Privatevs.CommonRandomBitsinCommunicationComplexity. Information
+processingletters,39(2):67–71,1991.
+[17] FrancescoMezzadri. HowtoGenerateRandomMatricesFromtheClassicalCompactGroups.
+arXivpreprintmath-ph/0609050,2006.
+[18] RWMWedderburn. GeneratingRandomRotations. ResearchReport,1975.
+[19] Richard M Heiberger. Generation of Random Orthogonal Matrices. Journal of the Royal
+StatisticalSociety: SeriesC(AppliedStatistics),27(2):199–206,1978.
+[20] GilbertWStewart. TheEfficientGenerationofRandomOrthogonalMatricesWithanApplica-
+tiontoConditionEstimators. SIAMJournalonNumericalAnalysis,17(3):403–409,1980.
+[21] Martin A Tanner and Ronald A Thisted. Remark as r42: A Remark on as 127. Generation
+ofRandomOrthogonalMatrices. JournaloftheRoyalStatisticalSociety.SeriesC(Applied
+Statistics),31(2):190–192,1982.
+[22] ShayVargaftik,RanBenBasat,AmitPortnoy,GalMendelson,YanivBen-Itzhak,andMichael
+Mitzenmacher. Drive: One-bitdistributedmeanestimation. arXivpreprintarXiv:2105.08339,
+2021.
+[23] Aleksandr Beznosikov, Samuel Horváth, Peter Richtárik, and Mher Safaryan. On biased
+compressionfordistributedlearning. arXivpreprintarXiv:2002.12410,2020.
+[24] AllanGrønlund,KasperGreenLarsen,AlexanderMathiasen,JesperSindahlNielsen,Stefan
+Schneider,andMingzhouSong. FastExactK-Means,K-MediansandBregmanDivergence
+Clusteringin1D. arXivpreprintarXiv:1701.07204,2017.
+[25] MarioLezcanoCasado. GeoTorch’sDocumentation.ALibraryforConstrainedOptimization
+andManifoldOptimizationforDeepLearninginPytorch.https://geotorch.readthedocs.
+io/en/latest/_modules/geotorch/so.html,2021. accessed17-May-21.
+[26] NirAilonandBernardChazelle. TheFastJohnson–LindenstraussTransformandApproximate
+NearestNeighbors. SIAMJournaloncomputing,39(1):302–322,2009.
+[27] Bernard J. Fino and V. Ralph Algazi. Unified matrix treatment of the fast walsh-hadamard
+transform. IEEETransactionsonComputers,25(11):1142–1146,1976.
+[28] Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic
+dimensionofobjectivelandscapes. InInternationalConferenceonLearningRepresentations,
+2018. Codeavailableat: https://github.com/uber-research/intrinsic-dimension.
+[29] Shay Vargaftik, Ran Ben Basat, Amit Portnoy, Gal Mendelson, Yaniv Ben-Itzhak, and
+Michael Mitzenmacher. DRIVE open source code. https://github.com/amitport/
+DRIVE-One-bit-Distributed-Mean-Estimation,2021.
+[30] KathyJHoradam. HadamardMatricesandTheirApplications. Princetonuniversitypress,
+2012.
+[31] AleksandrKhintchine. ÜberDyadischeBrüche. MathematischeZeitschrift,18(1):109–116,
+1923.
+[32] SSzarek. OntheBestConstantsintheKhinchinInequality. StudiaMathematica,2(58):197–
+208,1976.
+12
+----- PAGE 13 -----
+[33] Yuval Filmus. Khintchine-Kahane using Fourier Analysis. Posted at http://www.cs.
+toronto.edu/yuvalf/KK.pdf,2012.
+[34] Rafał Latała and Krzysztof Oleszkiewicz. On the Best Constant In the Khinchin-Kahane
+Inequality. StudiaMathematica,109(1):101–104,1994.
+[35] BrianChmiel,LiadBen-Uri,MoranShkolnik,EladHoffer,RonBanner,andDanielSoudry.
+Neural Gradients Are Near-Lognormal: Improved Quantized and Sparse Training. arXiv
+preprintarXiv:2006.08173,2020.
+[36] RonBanner,YuryNahshan,EladHoffer,andDanielSoudry. Post-Training4-BitQuantization
+ofConvolutionNetworksforRapid-Deployment. arXivpreprintarXiv:1810.05723,2018.
+[37] XuchengYe,PengchengDai,JunyuLuo,XinGuo,YingjieQi,JianleiYang,andYiranChen.
+Accelerating CNN Training by Pruning Activation Gradients. In European Conference on
+ComputerVision,pages322–338.Springer,2020.
+[38] MarcusSpruilletal. AsymptoticDistributionofCoordinatesonHighDimensionalSpheres.
+Electroniccommunicationsinprobability,12:234–247,2007.
+[39] PersiDiaconisandDavidFreedman. ADozendeFinetti-StyleResultsinSearchofaTheory.
+InAnnalesdel’IHPProbabilitésetstatistiques,volume23,pages397–423,1987.
+[40] Svetlozar T Rachev, L Ruschendorf, et al. Approximate Independence of Distributions on
+SpheresandTheirStabilityProperties. TheAnnalsofProbability,19(3):1311–1337,1991.
+[41] AdriaanJStam. LimitTheoremsforUniformDistributionsonSpheresinHigh-Dimensional
+EuclideanSpaces. JournalofAppliedprobability,19(1):221–228,1982.
+[42] CharlesMRader. ANewMethodofGeneratingGaussianRandomVariablesbyComputer.
+Technicalreport,MassachusettsInstituteofTechnology,LincolnLab,1969.
+[43] DavidBThomas.ParallelGenerationofGaussianRandomNumbersUsingtheTable-Hadamard
+Transform.In2013IEEE21stAnnualInternationalSymposiumonField-ProgrammableCustom
+ComputingMachines,pages161–168.IEEE,2013.
+[44] TamásHerendi,ThomasSiegl,andRobertFTichy. FastGaussianRandomNumberGeneration
+UsingLinearTransformations. Computing,59(2):163–181,1997.
+[45] AdamPaszke,SamGross,FranciscoMassa,AdamLerer,JamesBradbury,GregoryChanan,
+Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas
+Kopf,EdwardYang,ZacharyDeVito,MartinRaison,AlykhanTejani,SasankChilamkurthy,
+Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. PyTorch: An Imperative Style,
+High-Performance Deep Learning Library. In H. Wallach, H. Larochelle, A. Beygelzimer,
+F.d'Alché-Buc,E.Fox,andR.Garnett,editors,AdvancesinNeuralInformationProcessing
+Systems32,pages8026–8037.CurranAssociates,Inc.,2019.
+[46] Google. TensorFlow Federated: Machine Learning on Decentralized Data. https://www.
+tensorflow.org/federated,2020. accessed25-Mar-20.
+[47] JakubKonecˇný,H.BrendanMcMahan,FelixX.Yu,PeterRichtárik,AnandaTheerthaSuresh,
+andDaveBacon. FederatedLearning: StrategiesforImprovingCommunicationEfficiency,
+2017.
+[48] HongyiWang,ScottSievert,ShengchaoLiu,ZacharyB.Charles,DimitrisS.Papailiopoulos,
+andStephenWright. ATOMO:Communication-efficientLearningviaAtomicSparsification.
+InNeurIPS,pages9872–9883,2018.
+[49] ThijsVogels,SaiPraneethKarimireddy,andMartinJaggi.PowerSGD:PracticalLow-RankGra-
+dientCompressionforDistributedOptimization. InH.Wallach,H.Larochelle,A.Beygelzimer,
+F.d'Alché-Buc,E.Fox,andR.Garnett,editors,AdvancesinNeuralInformationProcessing
+Systems,volume32,2019.
+13
+----- PAGE 14 -----
+[50] SebastianUStich,Jean-BaptisteCordonnier,andMartinJaggi. SparsifiedSGDwithMemory.
+InS.Bengio,H.Wallach,H.Larochelle,K.Grauman,N.Cesa-Bianchi,andR.Garnett,editors,
+AdvancesinNeuralInformationProcessingSystems,volume31.CurranAssociates,Inc.,2018.
+[51] Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-Based Learning
+AppliedtoDocumentRecognition. ProceedingsoftheIEEE,86(11):2278–2324,1998.
+[52] YannLeCun, CorinnaCortes, andCJBurges. Mnisthandwrittendigitdatabase. ATTLabs
+[Online].Available: http://yann.lecun.com/exdb/mnist,2,2010.
+[53] GregoryCohen,SaeedAfshar,JonathanTapson,andAndreVanSchaik. EMNIST:Extending
+MNISTtoHandwrittenLetters. In2017InternationalJointConferenceonNeuralNetworks
+(IJCNN),pages2921–2926.IEEE,2017.
+[54] Alex Krizhevsky, Geoffrey Hinton, et al. Learning Multiple Layers of Features From Tiny
+Images. 2009.
+[55] William Shakespeare. The Complete Works of William Shakespeare. https://www.
+gutenberg.org/ebooks/100.
+[56] Stack Overflow Data. https://www.kaggle.com/stackoverflow/stackoverflow. ac-
+cessed01-Mar-21.
+[57] Nikita Ivkin, Daniel Rothchild, Enayat Ullah, Vladimir Braverman, Ion Stoica, and Ra-
+man Arora. Communication-Efficient Distributed Sgd With Sketching. arXiv preprint
+arXiv:1903.04488,2019.
+[58] DanielRothchild,AshwineePanda,EnayatUllah,NikitaIvkin,IonStoica,VladimirBraverman,
+JosephGonzalez,andRamanArora. FetchSGD:Communication-EfficientFederatedLearning
+WithSketching. InInternationalConferenceonMachineLearning,pages8253–8265.PMLR,
+2020.
+[59] MosesCharikar,KevinChen,andMartinFarach-Colton. Findingfrequentitemsindatastreams.
+In International Colloquium on Automata, Languages, and Programming, pages 693–703.
+Springer,2002.
+[60] TheTensorFlowAuthors.TensorFlowFederated:CompressionviaKashin’srepresentationfrom
+Hadamardtransform. https://github.com/tensorflow/model-optimization/blob/
+9193d70f6e7c9f78f7c63336bd68620c4bc6c2ca/tensorflow_model_optimization/
+python/core/internal/tensor_encoding/stages/research/kashin.py#L92. ac-
+cessed16-May-21.
+[61] SebastianCaldas,SaiMeherKarthikDuddu,PeterWu,TianLi,JakubKonecˇný,H.Brendan
+McMahan,VirginiaSmith,andAmeetTalwalkar. LEAF:ABenchmarkforFederatedSettings,
+2019.
+[62] SashankReddi,ZacharyCharles,ManzilZaheer,ZacharyGarrett,KeithRush,JakubKonecˇný,
+SanjivKumar,andH.BrendanMcMahan. AdaptiveFederatedOptimization,2020.
+[63] S.HochreiterandJ.Schmidhuber. LongShort-TermMemory. NeuralComputation,9:1735–
+1780,1997.
+[64] KaimingHe,XiangyuZhang,ShaoqingRen,andJianSun. DeepResidualLearningforImage
+Recognition.InProceedingsoftheIEEEconferenceoncomputervisionandpatternrecognition,
+pages770–778,2016.
+[65] FrankSeide,HaoFu,JashaDroppo,GangLi,andDongYu. 1-BitStochasticGradientDescent
+andItsApplicationtoData-ParallelDistributedTrainingofSpeechDNNs. InFifteenthAnnual
+ConferenceoftheInternationalSpeechCommunicationAssociation,2014.
+[66] SaiPraneethKarimireddy,QuentinRebjock,SebastianStich,andMartinJaggi. ErrorFeedback
+FixesSignSGDandotherGradientCompressionSchemes. InInternationalConferenceon
+MachineLearning,pages3252–3261,2019.
+14
+----- PAGE 15 -----
+[67] ShayVargaftik,RanBenBasat,AmitPortnoy,GalMendelson,YanivBen-Itzhak,andMichael
+Mitzenmacher. Communication-efficientfederatedlearningviarobustdistributedmeanestima-
+tion. arXivpreprintarXiv:2108.08842,2021.
+[68] MervinEMuller. ANoteonaMethodforGeneratingPointsUniformlyonN-Dimensional
+Spheres. CommunicationsoftheACM,2(4):19–20,1959.
+[69] GeorgeBennett.ProbabilityInequalitiesfortheSumofIndependentRandomVariables.Journal
+oftheAmericanStatisticalAssociation,57(297):33–45,1962.
+[70] AndreasMaureretal.ABoundontheDeviationProbabilityforSumsofNon-NegativeRandom
+Variables. J.InequalitiesinPureandAppliedMathematics,4(1):15,2003.
+[71] PawełJSzabłowski. UniformDistributionsonSpheresinFiniteDimensionalL andTheir
+α
+Generalizations. Journalofmultivariateanalysis,64(2):103–117,1998.
+[72] Carl-GustavEsseen. AMomentInequalityWithanApplicationtotheCentralLimitTheorem.
+ScandinavianActuarialJournal,1956(2):160–170,1956.
+[73] Google. TensorFlowModelOptimizationToolkit. https://www.tensorflow.org/model_
+optimization,2021. accessed19-Mar-21.
+[74] Apache license, version 2.0. https://www.apache.org/licenses/LICENSE-2.0. ac-
+cessed19-Mar-21.
+[75] Pytorch license. https://github.com/pytorch/pytorch/blob/
+aaccdc39965ade4b61b7852329739e777e244c25/LICENSE. accessed19-Mar-21.
+[76] CreativeCommonsAttribution-ShareAlike3.0license. https://creativecommons.org/
+licenses/by-sa/3.0/. accessed01-Mar-21.
+[77] The TensorFlow Authors. TensorFlow Federated: EncodedSumFactory class.
+https://github.com/tensorflow/federated/blob/v0.19.0/tensorflow_
+federated/python/aggregators/encoded.py#L40-L142. accessed19-May-21.
+Checklist
+1. Forallauthors...
+(a) Dothemainclaimsmadeintheabstractandintroductionaccuratelyreflectthepaper’s
+contributionsandscope? [Yes]
+(b) Didyoudescribethelimitationsofyourwork? [Yes]SeeSection9.
+(c) Didyoudiscussanypotentialnegativesocietalimpactsofyourwork? [No]Wedonot
+believethereisaninheritnegativesocietalimpactinthiswork.
+(d) Haveyoureadtheethicsreviewguidelinesandensuredthatyourpaperconformsto
+them? [Yes]
+2. Ifyouareincludingtheoreticalresults...
+(a) Didyoustatethefullsetofassumptionsofalltheoreticalresults? [Yes]
+(b) Didyouincludecompleteproofsofalltheoreticalresults? [Yes]
+3. Ifyouranexperiments...
+(a) Did you include the code, data, and instructions needed to reproduce the main ex-
+perimental results (either in the supplemental material or as a URL)? [Yes] In the
+SupplementalMaterial. Itwillbereleasedasopen-sourceafterpublication.
+(b) Didyouspecifyallthetrainingdetails(e.g.,datasplits,hyperparameters,howthey
+werechosen)? [Yes]seeSection7andAppendixE.
+(c) Didyoureporterrorbars(e.g.,withrespecttotherandomseedafterrunningexperi-
+mentsmultipletimes)? [No]Mostexperimentscanbeeasilyreproducedbutrequire
+considerable execution time and compute resources. We did include error bars in
+Figure1,whereitwasfeasible.
+15
+----- PAGE 16 -----
+(d) Didyouincludethetotalamountofcomputeandthetypeofresourcesused(e.g.,type
+ofGPUs,internalcluster,orcloudprovider)? [Yes]SeeSection7andAppendixE.
+4. Ifyouareusingexistingassets(e.g.,code,data,models)orcurating/releasingnewassets...
+(a) Ifyourworkusesexistingassets,didyoucitethecreators? [Yes]SeeSection7and
+AppendixE.
+(b) Didyoumentionthelicenseoftheassets? [Yes]SeeSection7andAppendixE.
+(c) DidyouincludeanynewassetseitherinthesupplementalmaterialorasaURL?[Yes]
+WeincludethesourcecodeofouralgorithmsintheSupplementalMaterial. Itwillbe
+releasedasopen-sourceafterpublication.
+(d) Didyoudiscusswhetherandhowconsentwasobtainedfrompeoplewhosedatayou’re
+using/curating? [N/A]Weusedwell-knowndatasetswhosecreatorsuseeitherpublicly
+availabledataorreceivedproperconsent.
+(e) Didyoudiscusswhetherthedatayouareusing/curatingcontainspersonallyidentifiable
+informationoroffensivecontent? [N/A]Weusedwell-knowndatasets,whichdonot
+containpersonallyidentifiableinformationoroffensivecontent.
+5. Ifyouusedcrowdsourcingorconductedresearchwithhumansubjects...
+(a) Didyouincludethefulltextofinstructionsgiventoparticipantsandscreenshots,if
+applicable? [N/A]Wedidnotusecrowdsourcingorconductedresearchwithhuman
+subjects.
+(b) Didyoudescribeanypotentialparticipantrisks,withlinkstoInstitutionalReviewBoard
+(IRB) approvals, if applicable? [N/A] We did not use crowdsourcing or conducted
+researchwithhumansubjects.
+(c) Didyouincludetheestimatedhourlywagepaidtoparticipantsandthetotalamount
+spentonparticipantcompensation? [N/A]Wedidnotusecrowdsourcingorconducted
+researchwithhumansubjects.
+16
