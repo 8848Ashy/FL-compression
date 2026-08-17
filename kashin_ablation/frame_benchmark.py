@@ -11,7 +11,7 @@ ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
 from fourier_frame import FourierFrame
-from gaussian_qr_frame import GaussianQRFrame
+from gaussian_frame import GaussianRandomFrame
 from kashin_solver import kashin_solve
 from quantization import reconstruction_mse
 
@@ -58,17 +58,17 @@ def evaluate(name, frame, x, lam):
 
 def benchmark():
     rows = []
-    for d in DIMENSIONS:
+    # The requested real-model run is mandatory. Small dimensions are retained
+    # only as smoke checks for the Gaussian implementation.
+    dimensions = (50890,)
+    for d in dimensions:
         for lam in REDUNDANCIES:
             D = int(round(lam * d))
             inputs = make_inputs(d)
-            for frame_name, factory in (("Fourier", FourierFrame), ("GaussianQR", GaussianQRFrame)):
+            for frame_name, factory in (("Fourier", FourierFrame), ("GaussianRandom", GaussianRandomFrame)):
                 print(f"Testing {frame_name}, d={d}, D={D}")
                 try:
                     frame = factory(d, D, seed=2026)
-                    if getattr(frame, "Q", True) is None:
-                        print("  skipped: Gaussian QR size limit")
-                        continue
                     for input_name, x in inputs:
                         row = evaluate(frame_name, frame, x, lam)
                         row["input"] = input_name
@@ -113,24 +113,14 @@ def benchmark():
             handle.write(f"| {row['frame']} | {row['input']} | {row['d']} | {row['lambda']} | {row['reconstruction']:.3e} | {row['peak_ratio']:.3f} | {row['1bit_mse']:.3e} | {row['2bit_mse']:.3e} | {row['4bit_mse']:.3e} | {row['8bit_mse']:.3e} | {total:.3f}s |\n")
 
     valid = [r for r in rows if r["frame"] == "Fourier"]
-    best = min(valid, key=lambda r: (r["peak_ratio"], r["4bit_mse"])) if valid else None
-    best_json = {
-        "selected_frame": best["frame"] if best else "Fourier",
-        "reason": {
-            "peak_ratio": best["peak_ratio"] if best else None,
-            "quantization_error": best["4bit_mse"] if best else None,
-            "speed": "fast FFT, arbitrary D"
-        }
-    }
-    with (RESULTS / "best_frame.json").open("w", encoding="utf-8") as handle:
-        json.dump(best_json, handle, indent=2)
     report = HERE / "Kashin_Frame_Ablation_Report.md"
     with report.open("w", encoding="utf-8") as handle:
         handle.write("# Kashin Frame Ablation Report\n\n")
-        handle.write("## Objective\n\nCompare alternative Kashin frames independently before changing the FL pipeline.\n\n")
-        handle.write("## Methods\n\nFourier uses random phases and FFT, supports arbitrary D, and avoids dense matrices. Gaussian QR constructs a dense Gaussian matrix and is limited to small validation dimensions.\n\n")
+        handle.write("## Objective\n\nCompare Random Fourier and Pure Gaussian Random frames independently before changing the FL pipeline. `2017.py` is not modified.\n\n")
+        handle.write("## Methods\n\nFourier uses random phases and FFT, supports arbitrary D, and avoids dense matrices. Pure Gaussian uses G_ij~N(0,1/D), regenerated in deterministic chunks; no QR and no dense D×d storage are used. Both are scaled with A=D/d.\n\n")
+        handle.write("## Experimental Setup\n\nThe requested real-model dimension is d=50890, with lambda=1.5, 2, 3 and D=int(lambda*d). Inputs are Gaussian, sparse, and a real FL delta_w.\n\n")
         handle.write("## Results\n\nSee `results/frame_comparison.md` and `results/frame_comparison.csv`.\n\n")
-        handle.write("## Recommendation\n\nFourier is recommended for the subsequent FL experiment because it supports arbitrary D and has FFT-scale computational cost. Gaussian QR is useful as a small-scale reference, but its dense construction is not practical for the real model dimension.\n")
+        handle.write("## Recommendation\n\nNo frame is selected automatically. Use the tables to decide after considering peak flattening, quantization error, runtime, and the recorded large-scale Gaussian cost or limitation.\n")
     print(f"Generated {csv_path}, {md_path}, {report}")
 
 

@@ -1,8 +1,0 @@
-{
-  "selected_frame": "Fourier",
-  "reason": {
-    "peak_ratio": 0.26317248169723906,
-    "quantization_error": 1.6016039694477513e-07,
-    "speed": "fast FFT, arbitrary D"
-  }
-}
