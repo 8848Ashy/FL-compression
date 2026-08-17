@@ -44,7 +44,9 @@ def fit_shared_codebook(model, frame):
         coefficients_i = fl.kashin_solve(frame, flat, iterations=5)
         coefficients.append(coefficients_i / (coefficients_i.abs().max() + 1e-12))
         print(f"  已完成校准客户端 {client_id + 1}/{fl.num_clients}")
-    return fl.lloyd_max_codebook(torch.cat(coefficients), K_LEVELS, LLOYD_ITERATIONS)
+    centers = fl.lloyd_max_codebook(torch.cat(coefficients), K_LEVELS, LLOYD_ITERATIONS)
+    # 系数按每客户端最大绝对值归一化到 [-1, 1]，码本也必须覆盖同一范围。
+    return centers / centers.abs().max().clamp_min(1e-12)
 
 
 def federated_round_scaled_lloyd(global_model, client_deltas, frame, centers):
@@ -117,6 +119,7 @@ def run_experiment():
     uniform_bits = None
     lloyd_bits = None
     diagnostics = []
+    round_codebooks = []
 
     for round_id in range(NUM_ROUNDS):
         print(f"\n========== Federated Round {round_id + 1}/{NUM_ROUNDS} ==========")
@@ -144,12 +147,14 @@ def run_experiment():
         cosine_uniform = []
         cosine_lloyd = []
         out_of_range = []
+        round_coefficients = []
         boundaries = (shared_centers[:-1] + shared_centers[1:]) / 2.0
         for delta_u, delta_l in zip(deltas_uniform, deltas_lloyd):
             flat_u, _ = fl.flatten_state_dict(delta_u)
             flat_l, _ = fl.flatten_state_dict(delta_l)
             coeff_u = fl.kashin_solve(frame, flat_u, iterations=KASHIN_ITERATIONS)
             coeff_l = fl.kashin_solve(frame, flat_l, iterations=KASHIN_ITERATIONS)
+            round_coefficients.append(coeff_l / (coeff_l.abs().max() + 1e-12))
 
             torch.set_rng_state(rng_state)
             quant_u, _ = fl.stochastic_k_level_quantize(coeff_u, K_LEVELS)
@@ -175,10 +180,16 @@ def run_experiment():
             "lloyd_cosine": float(np.mean(cosine_lloyd)),
             "lloyd_out_of_range": float(np.mean(out_of_range)),
         })
+        oracle_centers = fl.lloyd_max_codebook(torch.cat(round_coefficients), K_LEVELS, LLOYD_ITERATIONS)
+        oracle_centers = oracle_centers / oracle_centers.abs().max().clamp_min(1e-12)
+        round_codebooks.append(oracle_centers.detach().cpu().numpy())
         item = diagnostics[-1]
         print(f"诊断：MSE U/L={item['uniform_mse']:.3e}/{item['lloyd_mse']:.3e}, "
               f"cos U/L={item['uniform_cosine']:.6f}/{item['lloyd_cosine']:.6f}, "
               f"Lloyd超范围={item['lloyd_out_of_range'] * 100:.2f}%")
+        print("  固定码本:      " + ", ".join(f"{v:.4f}" for v in fixed_centers.tolist()))
+        print("  共享Lloyd码本: " + ", ".join(f"{v:.4f}" for v in shared_centers.tolist()))
+        print("  当轮理想码本:  " + ", ".join(f"{v:.4f}" for v in oracle_centers.tolist()))
 
         uniform_bits = fl.federated_round_kashin_update(
             model_uniform, deltas_uniform, K_LEVELS, frame, iterations=KASHIN_ITERATIONS)
@@ -223,6 +234,27 @@ def run_experiment():
     np.savetxt(f"kashin_quantization_diagnostics_{timestamp}.csv", diagnostic_array,
                delimiter=",", header="uniform_mse,lloyd_mse,uniform_cosine,lloyd_cosine,lloyd_out_of_range",
                comments="")
+
+    codebook_array = np.vstack(round_codebooks)
+    np.savetxt(f"kashin_codebooks_by_round_{timestamp}.csv", codebook_array,
+               delimiter=",", header=",".join(f"center_{i + 1}" for i in range(K_LEVELS)),
+               comments="")
+    fig_codebook, ax_codebook = plt.subplots(figsize=(9, 5))
+    for level in range(K_LEVELS):
+        ax_codebook.plot(range(1, NUM_ROUNDS + 1), codebook_array[:, level],
+                         marker="o", linewidth=2, label=f"Lloyd center {level + 1}")
+    ax_codebook.axhline(0, color="black", linewidth=0.8)
+    ax_codebook.set_xlabel("Federated Round")
+    ax_codebook.set_ylabel("Normalized quantization center")
+    ax_codebook.set_title("Ideal Lloyd-Max Codebook by Round")
+    ax_codebook.set_xticks(range(1, NUM_ROUNDS + 1))
+    ax_codebook.grid(True, linestyle="--", alpha=0.5)
+    ax_codebook.legend()
+    fig_codebook.tight_layout()
+    codebook_filename = f"kashin_codebooks_by_round_{timestamp}.png"
+    fig_codebook.savefig(codebook_filename, dpi=300)
+    plt.close(fig_codebook)
+    print(f"每轮理想 Lloyd-Max 码本图已保存: {codebook_filename}")
 
     rounds = np.arange(1, NUM_ROUNDS + 1)
     fig, ax = plt.subplots(figsize=(10, 6))
