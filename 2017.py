@@ -194,6 +194,19 @@ def lloyd_max_quantize(X_tensor, k_levels, iterations=20, tolerance=1e-6):
     indices = torch.bucketize(x, boundaries)
     return centers[indices], centers, boundaries
 
+
+def lloyd_max_codebook(X_tensor, k_levels, iterations=20):
+    """只拟合共享 Lloyd-Max 码本。客户端和服务器可复用同一 centers。"""
+    _, centers, _ = lloyd_max_quantize(X_tensor, k_levels, iterations)
+    return centers
+
+
+def quantize_with_codebook(X_tensor, centers):
+    """使用共享码本量化，返回量化值和索引。"""
+    boundaries = (centers[:-1] + centers[1:]) / 2.0
+    indices = torch.bucketize(X_tensor, boundaries)
+    return centers[indices], indices
+
 # ==========================================
 # 调试工具：量化前的动态范围累计与汇总（仅日志，不改变任何算法逻辑）
 # ==========================================
@@ -933,13 +946,13 @@ def federated_round_kashin_update(global_model, client_deltas, k_levels, frame, 
 
 
 def federated_round_kashin_lloyd_update(global_model, client_deltas, k_levels,
-                                        frame, iterations=10, lloyd_iterations=20):
+                                        frame, iterations=10, lloyd_iterations=20,
+                                        shared_centers=None, include_codebook_bits=False):
     """Kashin + Lloyd-Max 的 Δw 聚合版本。
 
-    与 federated_round_kashin_update 完全相同，只替换系数量化器。每个客户端
-    在自己的 Kashin 系数上训练 Lloyd-Max 码本，再上传量化系数和码本。
-    因此通信量计入 k 个 float32 量化中心：
-        (D*ceil(log2(k)) + 32*k) / d
+    shared_centers=None 时保留独立码本兼容模式；主实验应传入共享 centers。
+    共享模式下所有客户端使用同一套量化中心。通信量可选择计入一次性码本：
+        (D*ceil(log2(k)) + optional 32*k) / d
     这里不再额外发送 min/max；区间边界可由相邻中心计算。
     """
     aggregated_a = None
@@ -951,7 +964,10 @@ def federated_round_kashin_lloyd_update(global_model, client_deltas, k_levels,
         a = kashin_solve(frame, flat_i, iterations)
         if DEBUG_RANGE:
             _accumulate_range("Kashin Lloyd coefficient", a)
-        quantized_a, _, _ = lloyd_max_quantize(a, k_levels, iterations=lloyd_iterations)
+        if shared_centers is None:
+            quantized_a, _, _ = lloyd_max_quantize(a, k_levels, iterations=lloyd_iterations)
+        else:
+            quantized_a, _ = quantize_with_codebook(a, shared_centers)
         aggregated_a = quantized_a if aggregated_a is None else aggregated_a + quantized_a
 
     aggregated_a /= len(client_deltas)
@@ -960,7 +976,8 @@ def federated_round_kashin_lloyd_update(global_model, client_deltas, k_levels,
     updated_state = state_dict_add(global_model.state_dict(), average_delta_state)
     global_model.load_state_dict(updated_state)
 
-    return (frame.D * int(np.ceil(np.log2(k_levels))) + 32.0 * k_levels) / d_size
+    codebook_bits = 32.0 * k_levels if include_codebook_bits else 0.0
+    return (frame.D * int(np.ceil(np.log2(k_levels))) + codebook_bits) / d_size
 
 
 def verify_kashin_lloyd_update_pipeline():
@@ -1154,6 +1171,16 @@ def kashin_unit_test():
 # ==========================================
 # 6.6  聚焦三算法（Original / SRK / Kashin）Δw 压缩对比实验
 # ==========================================
+def build_shared_kashin_codebook(base_model, frame, k_levels):
+    """用所有客户端的一次校准更新拟合共享 Lloyd-Max 码本。"""
+    calibration = []
+    for client_id in range(num_clients):
+        delta = local_train_delta(base_model, client_loaders[client_id], epochs=1)
+        flat, _ = flatten_state_dict(delta)
+        calibration.append(kashin_solve(frame, flat, iterations=5))
+    return lloyd_max_codebook(torch.cat(calibration), k_levels, iterations=20)
+
+
 def run_focus_kashin_experiment(timestamp):
     """聚焦四算法（Original / SRK / Kashin / Kashin+Lloyd-Max）的 Δw 对比实验。
     - 仅使用已实现的 Δw 上传管线（local_train_delta + *_update 聚合）；
@@ -1188,6 +1215,9 @@ def run_focus_kashin_experiment(timestamp):
 
     num_rounds = NUM_ROUNDS_FOCUS
     k_levels = FIXED_K_LEVELS
+    print("正在用所有客户端的校准更新拟合共享 Lloyd-Max 码本...")
+    shared_lloyd_centers = build_shared_kashin_codebook(initial_model, kashin_frame, k_levels)
+    print(f"共享 Lloyd-Max 码本中心数: {len(shared_lloyd_centers)}")
 
     history_original = []
     history_srk = []
@@ -1236,7 +1266,7 @@ def run_focus_kashin_experiment(timestamp):
 
         b_kashin_lloyd = federated_round_kashin_lloyd_update(
             model_kashin_lloyd, local_deltas_kashin_lloyd, k_levels,
-            kashin_frame, iterations=10)
+            kashin_frame, iterations=10, shared_centers=shared_lloyd_centers)
         acc_kashin_lloyd = evaluate_model(model_kashin_lloyd, test_loader)
         history_kashin_lloyd.append(acc_kashin_lloyd)
         bits_kashin_lloyd_list.append(b_kashin_lloyd)
@@ -1309,6 +1339,8 @@ def run_focus_kashin_experiment(timestamp):
         model_srk = copy.deepcopy(base_model)
         model_kashin = copy.deepcopy(base_model)
         model_kashin_lloyd = copy.deepcopy(base_model)
+        print(f"  b={b}: 拟合共享 Lloyd-Max 码本...")
+        shared_lloyd_centers = build_shared_kashin_codebook(base_model, kashin_frame, k_levels)
 
         res = {}
         for method, model in (('original', model_original), ('srk', model_srk),
@@ -1325,7 +1357,9 @@ def run_focus_kashin_experiment(timestamp):
                     if method == 'kashin':
                         bits_r = federated_round_kashin_update(model, deltas_r, k_levels, kashin_frame, iterations=10)
                     else:
-                        bits_r = federated_round_kashin_lloyd_update(model, deltas_r, k_levels, kashin_frame, iterations=10)
+                        bits_r = federated_round_kashin_lloyd_update(
+                            model, deltas_r, k_levels, kashin_frame, iterations=10,
+                            shared_centers=shared_lloyd_centers)
             acc = evaluate_model(model, test_loader)
             res[method] = dict(acc=acc, err=1.0 - acc, bits=bits_r)
 
