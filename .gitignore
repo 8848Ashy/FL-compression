@@ -13,6 +13,7 @@ data/
 *.npz
 *.npy
 *.csv
+*.pt
 
 # Runtime logs and temporary outputs
 *.log
