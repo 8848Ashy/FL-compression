@@ -46,6 +46,9 @@ DEBUG_RANGE = True
 #   - 跑完自动把本开关恢复为 False 后退出。
 RUN_DISTRIBUTION_TEST = False
 
+# Lloyd-Max 独立测试开关；测试完成后保持 False，不自动进入。
+RUN_LLOYD_MAX_TEST = False
+
 # 分布诊断使用相对冗余度选择 Kashin 的 D，故不再与 SRK 的 65536 绑定。
 # 例如 1.10 表示 D≈1.10d；D 可以不是 2 的幂。
 KASHIN_REDUNDANCY_SETTINGS = [1.10, 1.25, 1.50, 2.00]
@@ -153,6 +156,43 @@ def stochastic_k_level_quantize(X_tensor, k_levels):
     Y_tensor = X_min + (quantized_r * s_i) / (k_levels - 1)
     
     return Y_tensor, quantized_r.long()
+
+
+def lloyd_max_quantize(X_tensor, k_levels, iterations=20, tolerance=1e-6):
+    """Lloyd-Max 非均匀标量量化，不改变输入张量。
+
+    返回：量化结果、量化中心、区间边界。中心在样本密集区域会更集中。
+    """
+    if X_tensor.ndim != 1:
+        raise ValueError("lloyd_max_quantize 只接受一维张量")
+    if k_levels < 2:
+        raise ValueError("k_levels 必须不小于 2")
+
+    x = X_tensor.detach()
+    xmin, xmax = x.min(), x.max()
+    if (xmax - xmin).abs() < 1e-12:
+        centers = x.repeat(k_levels)
+        boundaries = torch.full((k_levels - 1,), xmin, dtype=x.dtype, device=x.device)
+        return x.clone(), centers, boundaries
+
+    centers = torch.linspace(xmin, xmax, k_levels, dtype=x.dtype, device=x.device)
+    for _ in range(iterations):
+        boundaries = (centers[:-1] + centers[1:]) / 2.0
+        indices = torch.bucketize(x, boundaries)
+        new_centers = centers.clone()
+        for level in range(k_levels):
+            selected = x[indices == level]
+            if selected.numel() > 0:
+                new_centers[level] = selected.mean()
+        new_centers, _ = torch.sort(new_centers)
+        if torch.max(torch.abs(new_centers - centers)) <= tolerance * (xmax - xmin):
+            centers = new_centers
+            break
+        centers = new_centers
+
+    boundaries = (centers[:-1] + centers[1:]) / 2.0
+    indices = torch.bucketize(x, boundaries)
+    return centers[indices], centers, boundaries
 
 # ==========================================
 # 调试工具：量化前的动态范围累计与汇总（仅日志，不改变任何算法逻辑）
@@ -1405,11 +1445,56 @@ def analyze_transform_coefficient_distribution():
     print("Kashin D 列表：" + ", ".join(str(D) for D in kashin_D_settings))
     print("="*90)
 
+
+def test_lloyd_max_quantizer():
+    """独立比较均匀量化与 Lloyd-Max 量化，不进入联邦训练。"""
+    torch.manual_seed(1234)
+    x = torch.cat([torch.randn(50000) * 0.8, torch.randn(5000) * 2.5])
+    results = []
+    print("\n" + "=" * 80)
+    print("【Lloyd-Max 测试】均匀量化 vs 非均匀量化（仅独立测试）")
+    print("=" * 80)
+    print(f"{'k':>4s} {'uniform_mse':>16s} {'lloyd_mse':>16s} {'improvement':>14s}")
+    print("-" * 80)
+
+    for k in (2, 4, 8):
+        uniform, _ = stochastic_k_level_quantize(x, k)
+        lloyd, centers, _ = lloyd_max_quantize(x, k)
+        uniform_mse = torch.mean((x - uniform) ** 2).item()
+        lloyd_mse = torch.mean((x - lloyd) ** 2).item()
+        improvement = 100.0 * (uniform_mse - lloyd_mse) / max(uniform_mse, 1e-12)
+        results.append((k, uniform_mse, lloyd_mse))
+        print(f"{k:4d} {uniform_mse:16.6e} {lloyd_mse:16.6e} {improvement:13.2f}%")
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ks = [item[0] for item in results]
+    ax.plot(ks, [item[1] for item in results], 'o--', linewidth=2,
+            label='Uniform quantization')
+    ax.plot(ks, [item[2] for item in results], 's-', linewidth=2,
+            label='Lloyd-Max quantization')
+    ax.set_xlabel('Quantization levels k')
+    ax.set_ylabel('Mean squared quantization error')
+    ax.set_title('Uniform vs Lloyd-Max Quantization')
+    ax.set_xticks(ks)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.legend()
+    fig.tight_layout()
+    filename = f"lloyd_max_quantization_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    fig.savefig(filename, dpi=300)
+    plt.close(fig)
+    print(f"测试图已保存: '{filename}'")
+    return results
+
 # ==========================================
 # 7. 主程序运行与对比实验
 # ==========================================
 if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if RUN_LLOYD_MAX_TEST:
+        test_lloyd_max_quantizer()
+        print("\nLloyd-Max 独立测试完成，程序正常退出。")
+        sys.exit(0)
 
     # ---------- 分布诊断开关：True 时只运行变换系数分布分析，不验证、不训练、不出旧图 ----------
     if RUN_DISTRIBUTION_TEST:
