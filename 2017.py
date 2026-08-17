@@ -1361,6 +1361,9 @@ def run_focus_kashin_experiment(timestamp):
                             model, deltas_r, k_levels, kashin_frame, iterations=10,
                             shared_centers=shared_lloyd_centers)
             acc = evaluate_model(model, test_loader)
+            if method == 'kashin_lloyd':
+                # 共享码本只发送一次，按本次 trade-off 的轮数摊销到每轮。
+                bits_r += (32.0 * k_levels) / (model_dim_d * TRADEOFF_ROUNDS)
             res[method] = dict(acc=acc, err=1.0 - acc, bits=bits_r)
 
         for method in ('original', 'srk', 'kashin', 'kashin_lloyd'):
@@ -1379,12 +1382,15 @@ def run_focus_kashin_experiment(timestamp):
         err_kashin_list.append(res['kashin']['err'])
         err_kashin_lloyd_list.append(res['kashin_lloyd']['err'])
 
-    # ---- 图2：trade-off 曲线 ----
+    # ---- 图2：按真实通信量的 trade-off 曲线 ----
     fig2, ax2 = plt.subplots(figsize=(10, 6))
-    # Original：棕色水平虚线（不放入通信横轴曲线），用 3 个 b 的最终错误率均值
+    # Original 是固定 32 bit/原始维度/轮，作为一个真实通信点，不画成水平线。
     orig_final_err = sum(orig_errs) / len(orig_errs)
-    ax2.axhline(orig_final_err, color='#8c564b', linestyle='--', linewidth=2,
-                label='Original (Δw, No Compression, 32 bits/dim)')
+    original_total_bits = 32.0 * TRADEOFF_ROUNDS
+    ax2.scatter([original_total_bits], [orig_final_err], color='#8c564b', marker='D', s=70,
+                label='Original (Δw, No Compression)')
+    ax2.annotate('Original: 32 bit/param/round', xy=(original_total_bits, orig_final_err),
+                 xytext=(-125, 10), textcoords='offset points', fontsize=9, color='#8c564b')
 
     ax2.plot(cum_srk_list, err_srk_list, marker='^', linestyle='--', linewidth=2, color='#ff7f0e', label='SRK (Δw + Hadamard Rotation)')
     ax2.plot(cum_kashin_list, err_kashin_list, marker='P', linestyle='-', linewidth=2, color='#9467bd', label='Kashin (Δw + Kashin Transform)')
@@ -1392,11 +1398,11 @@ def run_focus_kashin_experiment(timestamp):
 
     # 每个点标注 b；SRK / Kashin 用不同文字偏移避免重叠
     for i, b in enumerate(TRADEOFF_BITS):
-        ax2.annotate(f'b={b}', xy=(cum_srk_list[i], err_srk_list[i]), xytext=(10, 8),
+        ax2.annotate(f'b={b}, D/d={kashin_frame.D/model_dim_d:.2f}', xy=(cum_srk_list[i], err_srk_list[i]), xytext=(10, 8),
                      textcoords='offset points', fontsize=9, color='#ff7f0e', ha='left')
-        ax2.annotate(f'b={b}', xy=(cum_kashin_list[i], err_kashin_list[i]), xytext=(10, -16),
+        ax2.annotate(f'b={b}, D/d={kashin_frame.D/model_dim_d:.2f}', xy=(cum_kashin_list[i], err_kashin_list[i]), xytext=(10, -16),
                      textcoords='offset points', fontsize=9, color='#9467bd', ha='left')
-        ax2.annotate(f'b={b}', xy=(cum_kashin_lloyd_list[i], err_kashin_lloyd_list[i]), xytext=(10, 8),
+        ax2.annotate(f'b={b}, D/d={kashin_frame.D/model_dim_d:.2f}', xy=(cum_kashin_lloyd_list[i], err_kashin_lloyd_list[i]), xytext=(10, 8),
                      textcoords='offset points', fontsize=9, color='#2ca02c', ha='left')
 
     ax2.set_xlabel("Cumulative Bits per Original Dimension / Client", fontsize=12)
@@ -1405,7 +1411,8 @@ def run_focus_kashin_experiment(timestamp):
     ax2.legend(fontsize=9)
     ax2.grid(True, linestyle='--', alpha=0.6)
 
-    info_text_2 = f"{TRADEOFF_ROUNDS} federated rounds per point\nLloyd-Max includes 32*k codebook bits"
+    info_text_2 = (f"x = cumulative actual bits / original dimension\n"
+                   f"{TRADEOFF_ROUNDS} rounds per point; Lloyd-Max codebook sent once")
     ax2.text(0.03, 0.97, info_text_2, transform=ax2.transAxes, fontsize=9,
              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
