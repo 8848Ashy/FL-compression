@@ -41,9 +41,30 @@ def fit_shared_codebook(model, frame):
     for client_id, loader in enumerate(fl.client_loaders):
         delta = fl.local_train_delta(model, loader, epochs=CALIBRATION_EPOCHS)
         flat, _ = fl.flatten_state_dict(delta)
-        coefficients.append(fl.kashin_solve(frame, flat, iterations=5))
+        coefficients_i = fl.kashin_solve(frame, flat, iterations=5)
+        coefficients.append(coefficients_i / (coefficients_i.abs().max() + 1e-12))
         print(f"  已完成校准客户端 {client_id + 1}/{fl.num_clients}")
     return fl.lloyd_max_codebook(torch.cat(coefficients), K_LEVELS, LLOYD_ITERATIONS)
+
+
+def federated_round_scaled_lloyd(global_model, client_deltas, frame, centers):
+    """共享归一化 Lloyd-Max：每客户端发送一个 float32 scale，避免码本失配。"""
+    aggregated = None
+    flat0, shapes = fl.flatten_state_dict(client_deltas[0])
+    for delta in client_deltas:
+        flat, _ = fl.flatten_state_dict(delta)
+        coeff = fl.kashin_solve(frame, flat, iterations=KASHIN_ITERATIONS)
+        scale = coeff.abs().max().clamp_min(1e-12)
+        normalized = coeff / scale
+        quantized, _ = fl.quantize_with_codebook(normalized, centers)
+        restored = quantized * scale
+        aggregated = restored if aggregated is None else aggregated + restored
+    aggregated /= len(client_deltas)
+    average_delta = fl.unflatten_state_dict(frame.frame_synthesis(aggregated), shapes)
+    global_model.load_state_dict(fl.state_dict_add(global_model.state_dict(), average_delta))
+    # D 个索引 + 每客户端一个 float32 scale。
+    bits = (frame.D * int(np.ceil(np.log2(K_LEVELS))) + 32.0) / flat0.shape[0]
+    return bits
 
 
 def run_experiment():
@@ -98,14 +119,17 @@ def run_experiment():
 
             torch.set_rng_state(rng_state)
             quant_u, _ = fl.stochastic_k_level_quantize(coeff_u, K_LEVELS)
-            quant_l, _ = fl.quantize_with_codebook(coeff_l, shared_centers)
+            scale_l = coeff_l.abs().max().clamp_min(1e-12)
+            quant_l, _ = fl.quantize_with_codebook(coeff_l / scale_l, shared_centers)
+            quant_l = quant_l * scale_l
             mse_uniform.append(torch.mean((coeff_u - quant_u) ** 2).item())
             mse_lloyd.append(torch.mean((coeff_l - quant_l) ** 2).item())
             bias_uniform.append(torch.norm(quant_u - coeff_u).item() / (torch.norm(coeff_u).item() + 1e-12))
             bias_lloyd.append(torch.norm(quant_l - coeff_l).item() / (torch.norm(coeff_l).item() + 1e-12))
             cosine_uniform.append(torch.nn.functional.cosine_similarity(coeff_u, quant_u, dim=0).item())
             cosine_lloyd.append(torch.nn.functional.cosine_similarity(coeff_l, quant_l, dim=0).item())
-            out_of_range.append(((coeff_l < boundaries[0]) | (coeff_l > boundaries[-1])).float().mean().item())
+            out_of_range.append((((coeff_l / scale_l) < boundaries[0]) |
+                                 ((coeff_l / scale_l) > boundaries[-1])).float().mean().item())
 
         diagnostics.append({
             "round": round_id + 1,
@@ -124,11 +148,8 @@ def run_experiment():
 
         uniform_bits = fl.federated_round_kashin_update(
             model_uniform, deltas_uniform, K_LEVELS, frame, iterations=KASHIN_ITERATIONS)
-        lloyd_bits = fl.federated_round_kashin_lloyd_update(
-            model_lloyd, deltas_lloyd, K_LEVELS, frame,
-            iterations=KASHIN_ITERATIONS,
-            shared_centers=shared_centers,
-            include_codebook_bits=False)
+        lloyd_bits = federated_round_scaled_lloyd(
+            model_lloyd, deltas_lloyd, frame, shared_centers)
 
         acc_uniform = fl.evaluate_model(model_uniform, fl.test_loader)
         acc_lloyd = fl.evaluate_model(model_lloyd, fl.test_loader)
