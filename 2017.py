@@ -7,8 +7,12 @@ import numpy as np
 import copy
 import math
 import sys
+from pathlib import Path
 import matplotlib.pyplot as plt  # 导入画图库
 from datetime import datetime
+
+OUTPUT_DIR = Path(__file__).resolve().parent / "figures_2017"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 设置随机种子保证对比的绝对公平
 torch.manual_seed(42)
@@ -1311,7 +1315,7 @@ def run_focus_kashin_experiment(timestamp):
     ax1.text(0.03, 0.97, info_text_1, transform=ax1.transAxes, fontsize=9,
              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-    acc_filename = f"kashin_vs_srk_accuracy_{timestamp}.png"
+    acc_filename = OUTPUT_DIR / f"kashin_vs_srk_accuracy_{timestamp}.png"
     fig1.savefig(acc_filename, dpi=300)
     print(f"\n图1已保存: '{acc_filename}'")
 
@@ -1416,7 +1420,7 @@ def run_focus_kashin_experiment(timestamp):
     ax2.text(0.03, 0.97, info_text_2, transform=ax2.transAxes, fontsize=9,
              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-    trade_filename = f"kashin_vs_srk_tradeoff_{timestamp}.png"
+    trade_filename = OUTPUT_DIR / f"kashin_vs_srk_tradeoff_{timestamp}.png"
     fig2.savefig(trade_filename, dpi=300)
     print(f"\n图2已保存: '{trade_filename}'")
 
@@ -1545,7 +1549,7 @@ def analyze_transform_coefficient_distribution():
         ax.grid(True, linestyle='--', alpha=0.4)
     fig.suptitle("Transform Coefficient Distribution (standardized) vs Standard Normal", fontsize=14)
     fig.tight_layout()
-    dist_filename = f"transform_distribution_vs_D_{ts}.png"
+    dist_filename = OUTPUT_DIR / f"transform_distribution_vs_D_{ts}.png"
     fig.savefig(dist_filename, dpi=300)
     plt.close(fig)
     print(f"\n分布图已保存: '{dist_filename}'")
@@ -1590,7 +1594,7 @@ def test_lloyd_max_quantizer():
     ax.grid(True, linestyle='--', alpha=0.5)
     ax.legend()
     fig.tight_layout()
-    filename = f"lloyd_max_quantization_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    filename = OUTPUT_DIR / f"lloyd_max_quantization_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
     fig.savefig(filename, dpi=300)
     plt.close(fig)
     print(f"测试图已保存: '{filename}'")
@@ -1809,7 +1813,7 @@ if __name__ == "__main__":
                     ha='center', va='bottom', fontsize=11, fontweight='bold')
 
     plt.tight_layout()
-    output_filename = f"mnist_icml2017_comparison_{timestamp}.png"
+    output_filename = OUTPUT_DIR / f"mnist_icml2017_comparison_{timestamp}.png"
     plt.savefig(output_filename, dpi=300)
     print(f"【第一阶段完成】图表已保存为: '{output_filename}'！")
     plt.close()
@@ -1908,7 +1912,7 @@ if __name__ == "__main__":
     ax_trade.grid(True, linestyle='--', alpha=0.6)
     ax_trade.legend(fontsize=11)
     
-    output_filename_trade = f"mnist_icml2017_tradeoff_{timestamp}.png"
+    output_filename_trade = OUTPUT_DIR / f"mnist_icml2017_tradeoff_{timestamp}.png"
     plt.savefig(output_filename_trade, dpi=300)
     print(f"【第二阶段完成】图表已保存为: '{output_filename_trade}'！")
 
@@ -1955,7 +1959,7 @@ if __name__ == "__main__":
     ax2_all.legend(fontsize=11)
 
     plt.tight_layout()
-    output_filename_combined = f"mnist_icml2017_combined_{timestamp}.png"
+    output_filename_combined = OUTPUT_DIR / f"mnist_icml2017_combined_{timestamp}.png"
     plt.savefig(output_filename_combined, dpi=300)
     print(f"【联合图表已保存为】 '{output_filename_combined}'！")
     plt.show()

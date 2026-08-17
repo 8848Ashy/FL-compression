@@ -10,6 +10,7 @@ Lloyd-Max 码本只在实验开始时用校准更新拟合一次，之后所有�
 
 import copy
 import importlib.util
+from pathlib import Path
 from datetime import datetime
 
 import matplotlib.pyplot as plt
@@ -21,6 +22,9 @@ CURRENT_FILE = r"D:\FL\2017.py"
 spec = importlib.util.spec_from_file_location("fl2017", CURRENT_FILE)
 fl = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fl)
+
+OUTPUT_DIR = Path(__file__).resolve().parent / "figures_kashin_lloyd_vs_uniform"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # 实验配置：只改这些参数即可重新实验
@@ -302,12 +306,12 @@ def run_experiment():
     diagnostic_array = np.array([[item[key] for key in (
         "uniform_mse", "lloyd_mse", "uniform_cosine", "lloyd_cosine",
         "lloyd_out_of_range")] for item in diagnostics])
-    np.savetxt(f"kashin_quantization_diagnostics_{timestamp}.csv", diagnostic_array,
+    np.savetxt(OUTPUT_DIR / f"kashin_quantization_diagnostics_{timestamp}.csv", diagnostic_array,
                delimiter=",", header="uniform_mse,lloyd_mse,uniform_cosine,lloyd_cosine,lloyd_out_of_range",
                comments="")
 
     codebook_array = np.vstack(round_codebooks)
-    np.savetxt(f"kashin_codebooks_by_round_{timestamp}.csv", codebook_array,
+    np.savetxt(OUTPUT_DIR / f"kashin_codebooks_by_round_{timestamp}.csv", codebook_array,
                delimiter=",", header=",".join(f"center_{i + 1}" for i in range(K_LEVELS)),
                comments="")
     fig_codebook, ax_codebook = plt.subplots(figsize=(9, 5))
@@ -322,7 +326,7 @@ def run_experiment():
     ax_codebook.grid(True, linestyle="--", alpha=0.5)
     ax_codebook.legend()
     fig_codebook.tight_layout()
-    codebook_filename = f"kashin_codebooks_by_round_{timestamp}.png"
+    codebook_filename = OUTPUT_DIR / f"kashin_codebooks_by_round_{timestamp}.png"
     fig_codebook.savefig(codebook_filename, dpi=300)
     plt.close(fig_codebook)
     print(f"每轮理想 Lloyd-Max 码本图已保存: {codebook_filename}")
@@ -346,7 +350,7 @@ def run_experiment():
     ax.set_ylim(min(np.r_[history_uniform, history_lloyd, history_fixed, history_layer]) * 100 - 1,
                 max(np.r_[history_uniform, history_lloyd, history_fixed, history_layer]) * 100 + 1)
     fig.tight_layout()
-    filename = f"kashin_uniform_vs_lloyd_{timestamp}.png"
+    filename = OUTPUT_DIR / f"kashin_uniform_vs_lloyd_{timestamp}.png"
     fig.savefig(filename, dpi=300)
     plt.close(fig)
     print(f"准确率图已保存: {filename}")
