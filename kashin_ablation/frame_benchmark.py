@@ -13,7 +13,7 @@ sys.path.insert(0, str(HERE))
 from fourier_frame import FourierFrame
 from gaussian_frame import GaussianRandomFrame
 from kashin_solver import kashin_solve
-from quantization import reconstruction_mse
+from quantization import reconstruction_mse, uniform_quantize
 
 RESULTS = HERE / "results"
 RESULTS.mkdir(parents=True, exist_ok=True)
@@ -124,5 +124,85 @@ def benchmark():
     print(f"Generated {csv_path}, {md_path}, {report}")
 
 
+def large_scale_fourier_vs_gaussian():
+    """Required first run: d=50890, lambda=2, RealFL, 2 bits, 10 iterations."""
+    import importlib.util
+    import os
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+    except ImportError:
+        process = None
+
+    d = 50890
+    D = 101780
+    lam = 2.0
+    bits = 2
+    seed = 2026
+    sample_path = RESULTS / "sample_delta.pt"
+    if not sample_path.exists():
+        spec = importlib.util.spec_from_file_location("fl2017", ROOT / "2017.py")
+        fl = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fl)
+        delta = fl.local_train_delta(fl.MNIST_MLP(), fl.client_loaders[0], epochs=1)
+        flat, _ = fl.flatten_state_dict(delta)
+        torch.save(flat, sample_path)
+    x = torch.load(sample_path, map_location="cpu", weights_only=True).float()
+    if x.numel() != d:
+        raise ValueError(f"sample_delta has dimension {x.numel()}, expected {d}")
+
+    rows = []
+    cache = RESULTS / "gaussian_cache_lambda2"
+    for name, factory, kwargs in (
+        ("Fourier", FourierFrame, {}),
+        ("GaussianRandom", GaussianRandomFrame, {"cache_dir": cache}),
+    ):
+        init_start = time.perf_counter()
+        frame = factory(d, D, seed=seed, **kwargs)
+        init_time = getattr(frame, "init_time", time.perf_counter() - init_start)
+        peak_before = process.memory_info().rss if process else 0
+
+        analysis_start = time.perf_counter()
+        initial = frame.analysis(x)
+        analysis_time = time.perf_counter() - analysis_start
+        solver_start = time.perf_counter()
+        coefficient = kashin_solve(frame, x, iterations=10)
+        solver_time = time.perf_counter() - solver_start
+        synthesis_start = time.perf_counter()
+        reconstructed = frame.synthesis(coefficient)
+        synthesis_time = time.perf_counter() - synthesis_start
+        quantized = uniform_quantize(coefficient, bits)
+        quantized_reconstructed = frame.synthesis(quantized)
+        peak_after = process.memory_info().rss if process else 0
+        row = {
+            "frame": name, "d": d, "D": D, "lambda": lam, "input_type": "RealFL",
+            "bits": bits, "initial_peak": initial.abs().max().item(),
+            "kashin_peak": coefficient.abs().max().item(),
+            "peak_ratio": coefficient.abs().max().item() / (initial.abs().max().item() + 1e-12),
+            "reconstruction_mse": torch.mean((x - reconstructed) ** 2).item(),
+            "relative_reconstruction_error": torch.norm(x - reconstructed).item() / (torch.norm(x).item() + 1e-12),
+            "quantization_mse": torch.mean((x - quantized_reconstructed) ** 2).item(),
+            "relative_quantization_error": torch.mean((x - quantized_reconstructed) ** 2).item() / (torch.mean(x ** 2).item() + 1e-12),
+            "frame_init_time": init_time, "analysis_time": analysis_time,
+            "synthesis_time": synthesis_time, "kashin_solver_time": solver_time,
+            "peak_memory_mb": max(peak_before, peak_after) / (1024 ** 2), "seed": seed,
+        }
+        rows.append(row)
+        print(row)
+
+    csv_path = RESULTS / "large_scale_fourier_vs_gaussian.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer.writeheader(); writer.writerows(rows)
+    md_path = RESULTS / "large_scale_fourier_vs_gaussian.md"
+    with md_path.open("w", encoding="utf-8") as handle:
+        handle.write("# Large-scale Fourier vs Pure Gaussian Frame\n\n")
+        handle.write("Settings: d=50890, lambda=2, D=101780, input=RealFL, bits=2, Kashin iterations=10, seed=2026.\n\n")
+        handle.write("| Frame | init s | analysis s | solver s | synthesis s | peak ratio | 2-bit MSE | relative reconstruction | peak memory MB |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+        for row in rows:
+            handle.write(f"| {row['frame']} | {row['frame_init_time']:.3f} | {row['analysis_time']:.3f} | {row['kashin_solver_time']:.3f} | {row['synthesis_time']:.3f} | {row['peak_ratio']:.4f} | {row['quantization_mse']:.3e} | {row['relative_reconstruction_error']:.3e} | {row['peak_memory_mb']:.1f} |\n")
+    print(f"Generated {csv_path} and {md_path}")
+
+
 if __name__ == "__main__":
-    benchmark()
+    large_scale_fourier_vs_gaussian()
