@@ -2,24 +2,27 @@
 
 ## Objective
 
-Compare Random Fourier and Pure Gaussian Random frames independently before changing the FL pipeline. `2017.py` is not modified.
+本项目用于验证 Fourier Kashin frame 在真实联邦学习更新上的系数幅度和量化误差表现。它是独立诊断实验，不修改主联邦学习程序。
 
-## Methods
+## Method
 
-Fourier uses random phases and FFT, supports arbitrary D, and avoids dense matrices. Pure Gaussian uses G_ij~N(0,1/D), regenerated in deterministic chunks; no QR and no dense D×d storage are used. Both are scaled with A=D/d.
+Fourier frame 通过随机相位、FFT 和抽取/嵌入操作实现紧框架分析与合成。实现不保存 `d × D` 稠密矩阵，不使用 Hadamard/FWHT，因此 `D` 可以是任意整数。Kashin solver 对分析系数反复截断、合成并更新残差。
 
-## Experimental Setup
-
-The requested real-model dimension is d=50890, with lambda=1.5, 2, 3 and D=int(lambda*d). Inputs are Gaussian, sparse, and a real FL delta_w.
+当前正式实验设置：真实 FL update，`d=50890`，`D=101780`，2 bit，10 次迭代，随机种子 2026。
 
 ## Results
 
-The required large-scale run is recorded in `results/large_scale_fourier_vs_gaussian.csv` and `.md`. Fourier completed. Gaussian block initialization produced about 19.3 GB of cache, but the matrix products did not finish within the runtime window and were stopped. The Gaussian row is explicitly marked `TIME_LIMIT`; no quality numbers were fabricated.
+运行 `python kashin_ablation/frame_benchmark.py` 后，结果保存在：
 
-## Runtime Limitation
+- `results/frame_comparison.csv`
+- `results/frame_comparison.md`
 
-Chunked caching avoids allocating the full `D x d` matrix in RAM, but it still requires about 19.3 GB disk for this setting. Analysis and synthesis must multiply all Gaussian blocks, and the Kashin solver performs ten residual iterations. This is a compute-time bottleneck, not an OOM result.
+正式结果只报告 Fourier frame，不把未完成的其他候选方法作为质量对比结论。
 
 ## Recommendation
 
-No frame is selected automatically. Use the tables to decide after considering peak flattening, quantization error, runtime, and the recorded large-scale Gaussian cost or limitation.
+当前项目保留 Fourier Kashin frame 作为后续主 FL 实验的候选实现。它的优势是任意 `D`、不需要稠密矩阵、并且适合大模型维度；这不等同于已经证明它在所有指标上优于其他未完成候选方法。
+
+## Discarded Experiment
+
+Pure random frame was explored as a candidate, but the full `d=50890` benchmark was not completed because its matrix-vector operations were too computationally expensive. It is not included in the formal quality comparison.

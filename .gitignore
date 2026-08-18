@@ -14,7 +14,8 @@ data/
 *.npy
 *.csv
 *.pt
-kashin_ablation/results/gaussian_cache_*/
+kashin_ablation/results/gaussian_cache*/
+kashin_ablation/results/Gaussian_cache*/
 
 # Runtime logs and temporary outputs
 *.log
