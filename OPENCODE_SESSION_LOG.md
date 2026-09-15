@@ -58,3 +58,32 @@ D:\FL\PROJECT_HANDOFF.md 只可作只读背景参考，绝对不要修改它。
 **下一步：**
 
 - 等待用户布置具体任务；每次会话结束前提醒用户是否需要更新本日志。
+
+---
+
+## 2026-09-13~15 · 会话 2：服务器 GPU 实验环境 + 压缩现象分析 + GitHub 闭环
+
+**讨论要点：**
+
+- 用 SSHFS-Win 将服务器（172.31.100.235，hczhang@enine）家目录挂载为 Windows O: 盘；项目代码经 robocopy 同步至服务器 `~/FL`（排除 .git/结果/论文文档）。
+- 服务器环境：Ubuntu 22.04 + Python 3.10，双卡 RTX 6000D（用空闲的 GPU 1），建 venv `~/flenv`，装 torch 2.14.0+cu130（清华源）；本机与服务器配好 SSH 密钥免密。
+- 代码 GPU 化：数据/模型上 cuda、`srk.py` 设备适配；实验从 8 轮延长到 50 轮收敛（~92% 平台期）。
+- 核心问题"为什么各压缩配置精度无差异"：多种子（n=5）+ 全量测试集（10000 张）+ 无压缩基线实验证明——配置间差异小于随机波动；量化失真随比特严格按理论 1/(2^b−1)² 下降（b=4 时单客户端仅 4.3%，10 客户端平均后 ~0.4%），量化从未成为训练瓶颈；2-bit 精度 93.15% ≈ 不压缩基线 93.19%，通信省 12 倍。
+- 评估缺陷修复：测试集 1000→10000 张（单点评估噪声 ±0.86%→±0.26%）。
+- λ 无规律的解释：λ 的作用通道（降低失真）整体低于精度感知阈，即使零评估噪声精度-λ 曲线预期也是平的；规律需在失真域观测。
+
+**决定：**
+
+- 建立 GitHub 管理闭环：本地 `D:\FL`（主仓库）→ push → `github.com/8848Ashy/FL-compression`（私有）→ 服务器 `~/FL`（浅克隆、deploy key 只读）git pull。
+- 日常纪律：代码只在本地改；O 盘只取结果不改代码；服务器上的改动须 scp 回流本地。
+- 报告 `报告/9.14.pptx` 第 4 页"原因分析"内容已定稿，待写入。
+
+**文件改动：**
+
+- 代码：`federated/local_training.py`、`federated/evaluation.py`、`compression/srk.py`（GPU 设备适配）；`experiments/lowbit.py`（种子参数化、`save_outputs`、无压缩基线 Original）；`data/mnist_federated.py`（test_size 10000）；`config.py`（50 轮）。
+- 新增：`run_multi_seed.py`、`verify_quantizer.py`、`plot_rounds.py`；服务器端 `run_fl.sh`、`run_multiseed.sh`。
+- 结果（服务器 `~/FL/plots`、`~/FL/results`）：50 轮收敛曲线、多 seed 误差棒图、量化失真曲线图 + CSV。
+
+**下一步：**
+
+- 写入 9.14.pptx 第 4 页；λ-失真曲线（E1）、b=1 极端区 λ-精度曲线（E2）两个实验待做。
