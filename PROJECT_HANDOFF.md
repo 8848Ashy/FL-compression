@@ -1,221 +1,220 @@
-# 联邦学习 Kashin 压缩实验 - 项目交接说明
+# FL Kashin Compression Project — Current Handoff
 
-更新时间：2026-08-14
+**Updated:** 2026-09-11  
+**Project root:** `D:\FL`  
+**Python environment:** `C:\Users\zhang\.conda\envs\fl_env\python.exe`
 
-## 1. 项目目标
+## 1. Research objective
 
-在 MNIST 联邦学习中研究通信压缩。当前重点是比较：
+Study uplink communication compression for federated learning on MNIST. The intended scientific comparison is:
 
-- Original：无压缩 FedAvg；
-- SRK：Hadamard 随机旋转 + 随机 k 级量化；
-- Kashin：随机冗余紧框架 + Kashin 系数求解 + 随机 k 级量化。
+1. Original FedAvg (uncompressed model updates)
+2. SRK (Hadamard/FWHT rotation + stochastic k-level quantization)
+3. Fourier-Kashin (redundant Fourier frame + Kashin coefficient solver + stochastic k-level quantization)
 
-研究问题是：**在相同上行通信预算下，Kashin 是否比 SRK 有更小的性能损失？**
+The research question is **not** “does Kashin always beat SRK at the same bit width?” Kashin uses a redundant representation, so the meaningful question is whether it can use fewer quantization bits while retaining comparable accuracy at lower actual communication.
 
-不要预设 Kashin 一定更好；当前结果并未稳定支持该结论。
+Do not claim Kashin is better unless the observed accuracy difference and communication budget support it.
 
-## 2. 当前主代码与环境
+## 2. Fixed experimental setup
 
-- 主代码：`D:\FL\2017.py`
-- Conda 环境：`fl_env`
-- 数据集：MNIST
-- 模型：MLP，`784 -> 64 -> 10`
-- 客户端数：10
-- 每个客户端训练样本数：600
-- 测试集：MNIST 测试集前 1000 张
-- 本地训练默认：2 epoch、SGD、学习率 0.05
+- Dataset: MNIST
+- Model: MLP `784 -> 64 -> 10`
+- Parameter dimension: `d = 50890`
+- Clients: 10
+- Data per client: 600 consecutive MNIST training examples
+- Test set: first 1000 MNIST test examples
+- Local training: SGD, learning rate 0.05, 2 local epochs
+- Default main rounds: 8
+- Seeds: model seed 42; Fourier-Kashin experiment seed 2026
 
-## 3. 重要理论背景（给 AI 的约束）
+Updates, not full model parameters, are uploaded:
 
-### 3.1 为什么上传更新量 Delta-w
-
-当前新管线压缩客户端更新量：
-
-`delta_w_i = w_local_i - w_global`
-
-服务器更新：
-
-`w_global_next = w_global + average_i(Q(delta_w_i))`
-
-在无压缩、客户端等权重时，这与直接平均完整本地模型参数完全等价；但压缩时上传更新量更合理，因为它只传递本轮新增信息。
-
-### 3.2 SRK 与 Kashin 的差异
-
-- SRK：将长度 `d` 的更新量补零到 `d_pow2` 后，进行随机符号 Hadamard 旋转，再量化；Hadamard 是等维可逆旋转。
-- Kashin：使用冗余紧框架 `U`，求长度 `D>d` 的系数 `a`，使 `delta_w ≈ U a`；`kashin_solve` 通过迭代截断寻找峰值较小、更均匀的系数，再量化 `a`。
-- Kashin 不是简单“换一个随机矩阵”；关键是“冗余框架 + 迭代系数求解”。
-
-当前 Kashin frame 是随机部分 Hadamard + 随机列符号：
-
-`U = sqrt(D/d) * R * H_D * S`
-
-其中 `R` 为随机选行，`H_D` 为归一化 Hadamard，`S` 为随机正负号对角矩阵。
-
-## 4. 已完成的代码工作
-
-### 4.1 更新量工具与验证
-
-已经新增：
-
-- `state_dict_subtract(local_state, global_state)`
-- `state_dict_add(global_state, delta_state)`
-- `local_train_delta(global_model, dataloader, epochs=2, lr=0.05)`
-- `federated_round_original_update(global_model, client_deltas)`
-
-已验证：
-
-- 完整模型平均 vs 平均 Delta-w 后加回全局模型：最大差异约 `7.45e-09`；
-- 贴近主循环的另一验证：最大差异约 `1.86e-09`；
-- 两者均通过阈值 `1e-6`。
-
-### 4.2 SRK 更新量版本
-
-已新增：
-
-`federated_round_srk_update(global_model, client_deltas, k_levels, rotation_seed=None)`
-
-特点：
-
-- 压缩 Delta-w，不再压缩完整模型；
-- 同一轮所有客户端与服务器共享同一个随机符号向量；
-- 使用向量化 `_fwht_fast`，数学上已验证与旧 `fast_walsh_hadamard_transform` 等价；
-- SRK 管线结构验证已经通过，无 NaN/Inf、维度正确。
-
-### 4.3 Kashin 更新量版本
-
-已新增：
-
-`federated_round_kashin_update(global_model, client_deltas, k_levels, frame, iterations=10)`
-
-特点：
-
-- 压缩 Delta-w；
-- 使用共享 `KashinFrame`，不按客户端或轮次重新创建；
-- 量化前调用 `kashin_solve`；
-- Kashin 管线结构验证已经通过，无 NaN/Inf、维度正确。
-
-### 4.4 Kashin 单元测试
-
-已有 `KashinFrame`、`kashin_solve`、`kashin_unit_test`。
-
-已测：
-
-- 原始参数维度：`d = 50890`
-- 框架系数维度：`D = 65536`
-- 冗余度：`D/d ≈ 1.2878`
-- canonical 重构误差约 `1.46e-07`
-- Kashin 重构误差约 `1.46e-07`
-- 20 个随机向量中，Kashin/naive 系数峰值比值中位数约 `0.90`。
-
-注意：这只证明当前测试中峰值有约 10% 下降和重构正确；不证明 Kashin 在联邦准确率上必然优于 SRK。
-
-## 5. 当前主实验开关
-
-`2017.py` 顶部当前配置应为：
-
-```python
-RUN_FULL_EXPERIMENT = True
-FOCUS_ON_KASHIN = True
-FIXED_BITS = 2
-FIXED_K_LEVELS = 2 ** FIXED_BITS
-NUM_ROUNDS_FOCUS = 8
-TRADEOFF_BITS = [1, 2, 3]
-TRADEOFF_ROUNDS = 8
+```text
+delta_w_i = local_model_i - global_model
+global_next = global + average(compressed(delta_w_i))
 ```
 
-运行主程序后：
+Without compression, averaging deltas then adding back is numerically equivalent to averaging local models (tested at approximately `1e-9` maximum difference).
 
-1. 先执行四个轻量验证；
-2. 验证都通过后，运行 `run_focus_kashin_experiment(timestamp)`；
-3. 默认只跑 Original、SRK、Kashin 三种 Delta-w 方法；
-4. 不跑旧 SK/SVK/五算法实验。
+## 3. Current project architecture
 
-## 6. 当前通信量口径（极重要）
+```text
+2017.py                    thin main entry
+config.py                  experiment switches and constants
+models/mnist_mlp.py        MNIST_MLP
+data/mnist_federated.py    MNIST loading and fixed client split
+federated/                 local training, evaluation, Original aggregation
+compression/               SRK, Fourier-Kashin, quantizers, solver
+utils/                     state_dict and communication formulas
+experiments/               experiment scripts
+tests/                     unit/regression checks
+kashin_ablation/           standalone Fourier lambda/frame ablation
+results/, plots/           generated main-experiment outputs
+```
 
-统一口径为：**每客户端、每原始参数维度的上行 bit 数**。
+### Important implementation distinction
 
-- Original：`32.0`
-- SRK：
+- **SRK** remains the Hadamard/FWHT baseline. It zero-pads `d=50890` to `65536` and uses FWHT.
+- **Fourier-Kashin** is now `compression.kashin_frame.FourierKashinFrame`. It always uses FFT/IRFFT, even when `D` is a power of two. It has no FWHT fallback.
+- `D` can be any integer: `D = round(lambda * d)`.
+- Main selected lambda is configured in `config.py` as `KASHIN_LAMBDA = 2.0`.
 
-`(d_pow2 * ceil(log2(k)) + 64) / d`
+## 4. Current main runnable experiment
 
-- Kashin：
+Run from `D:\FL`:
 
-`(D * ceil(log2(k)) + 64) / d`
+```powershell
+$env:MPLBACKEND="Agg"
+& "C:\Users\zhang\.conda\envs\fl_env\python.exe" 2017.py
+```
 
-当前 `d=50890`，`d_pow2=D=65536`，所以 SRK 与 Kashin 同一 `k` 下通信量严格相同。
+Current `config.py` has `RUN_FULL_EXPERIMENT = True` and `RUN_LOWBIT_EXPERIMENT = True`; therefore the current entry runs the **low-bit SRK vs Fourier-Kashin experiment**:
 
-例如 `b=2`，即 `k=2**b=4`：
+```text
+SRK-2bit  vs Kashin(lambda=2)-1bit
+SRK-4bit  vs Kashin(lambda=2)-2bit
+SRK-8bit  vs Kashin(lambda=2)-4bit
+```
 
-- 单轮通信量：约 `2.576852 bit/dim/client`
-- 若运行 8 轮：累计约 `20.6148 bit/dim/client`
+It runs 8 FL rounds with 10 clients, then writes:
 
-因此 SRK 与 Kashin 是公平对比对象。Original 的 32 bit/dim 仅作为无压缩性能参考，不是同通信量基线。
+- `results/kashin_lowbit_round_metrics.csv`
+- `results/kashin_accuracy_saving.csv`
+- `plots/kashin_lowbit_accuracy_communication.png`
+- `plots/kashin_lowbit_normalized_communication.png`
+- `plots/kashin_lowbit_target_accuracy.png`
 
-## 7. 当前图与正确解读
+This experiment overwrites only those named low-bit output files when rerun. Historical result files should otherwise be preserved.
 
-### 图 1：固定 bit 的收敛曲线
+## 5. Communication accounting (authoritative)
 
-文件格式：
+All formulas are centralized in `utils/communication.py`.
 
-`kashin_vs_srk_accuracy_<timestamp>.png`
+```text
+Original per client per round = d * 32
+SRK per client per round      = 65536 * bits + 64
+Kashin per client per round   = D * bits + 64
+D                              = round(lambda * d)
 
-设置：固定 `b=2`（即 `k=4`），8 轮。
+total bits = per-client-per-round bits * clients * rounds
+MB         = total bits / 8 / 1024 / 1024
+```
 
-包含 Original、SRK、Kashin 的准确率随联邦轮次变化。
+For this model:
 
-正确表述：
+| Method | Encoded dimension | 1-bit | 2-bit | 4-bit |
+|---|---:|---:|---:|---:|
+| SRK | 65536 | 65600 | 131136 | 262208 |
+| Kashin, lambda=2 | 101780 | 101844 | 203624 | 407184 |
+| Kashin, lambda=2.5 | 127225 | 127289 | 254514 | 509064 |
+| Kashin, lambda=3 | 152670 | 152734 | 305404 | 610744 |
 
-> 单次运行中，SRK、Kashin 可以接近无压缩 Original。若某一轮压缩方法略高于 Original，通常只能视为随机量化/训练噪声造成的波动，不能宣称压缩优于无压缩。
+These entries are **bits per client per round**. Never claim SRK and Kashin have the same communication merely because they use the same quantizer bit width.
 
-### 图 2：通信-错误率 trade-off 图
+## 6. Current quantitative findings
 
-最新示例文件：
+### Low-bit main experiment (single seed, 8 rounds)
 
-`D:\FL\kashin_vs_srk_tradeoff_20260814_000902.png`
+Final values in `results/kashin_bit_tradeoff.csv`:
 
-设置：`b=1,2,3`，每个点训练 **8 轮**。
+| Comparison | SRK accuracy | Kashin accuracy | SRK total MB | Kashin total MB | Saving |
+|---|---:|---:|---:|---:|---:|
+| SRK-2bit vs Kashin-1bit | 89.5% | 8.5% | 1.2506 | 0.9713 | 22.34% |
+| SRK-4bit vs Kashin-2bit | 89.2% | 89.1% | 2.5006 | 1.9419 | 22.34% |
+| SRK-8bit vs Kashin-4bit | 89.3% | 89.2% | 5.0006 | 3.8832 | 22.35% |
 
-- 横轴：8 轮累计通信量；越左越省通信；
-- 纵轴：最终分类错误率；越低越好；
-- 同一个 `b` 下 SRK 与 Kashin 横坐标相同，谁的点更低谁更好；
-- 棕色虚线：Original 的无压缩错误率参考。
+Defensible interpretation:
 
-最新单次结果大致为：
+- Kashin at 1 bit fails in the current min/max stochastic quantizer pipeline (accuracy collapsed to ~8.5%).
+- Kashin 2-bit is close to SRK 4-bit in this single run while sending ~22.3% less traffic.
+- Kashin 4-bit is close to SRK 8-bit in this single run while sending ~22.3% less traffic.
+- This is single-seed MNIST/MLP evidence only. It is not enough for a general superiority claim.
 
-| b | 累计 bit/dim/client | SRK error | Kashin error | 单次较好者 |
-|---|---:|---:|---:|---|
-| 1 | 10.31 | 9.8% | 10.3% | SRK |
-| 2 | 20.61 | 10.7% | 11.0% | SRK |
-| 3 | 30.92 | 9.7% | 10.0% | SRK |
+### Fourier lambda ablation (frame-level, not full FL)
 
-正确结论：
+`kashin_ablation/frame_benchmark.py` runs a real-update Fourier frame diagnostic across lambda values. The generated lambda report and plots are under `kashin_ablation/results/`.
 
-> 在当前低冗余度 `lambda≈1.29`、单随机种子、8轮的设置下，SRK 略优于 Kashin；差距约 0.3-0.5 个百分点。不能宣称 Kashin 已取得优势。
+Observed trend: larger lambda reduces the coefficient peak ratio but increases coefficient count and communication. It does **not** establish the best lambda for full FL by itself.
 
-重要问题：最新 trade-off 图的左上角文字仍误写成 `4 federated rounds per point`，但横轴与实际配置已是 8 轮。若修改图，必须把这行改成 `8 federated rounds per point`。标题也更准确应为 `Trade-off: Communication vs Classification Error`，因为纵轴是 error 不是 accuracy。
+## 7. Current quantization status
 
-### 为什么 bit 越多不一定单调更好
+The active SRK/Kashin main experiment uses:
 
-每个 b 都是独立短训练；模型初始化、DataLoader 打乱、随机量化和随机旋转都会造成波动。因此不应依据当前单种子、三个点的曲线声称“bit 越多误差一定越小”。
+```python
+stochastic_k_level_quantize
+```
 
-## 8. 当前汇报可用表述
+Location: `compression/quantization.py`.
 
-> 我将通信对象从完整模型参数改为客户端本地更新量 Delta-w，并验证了无压缩时它与原 FedAvg 数值等价。随后实现了 SRK 与 Kashin 的更新量压缩。为公平比较，二者均使用 65536 个量化系数，因此同一 bit 下通信量严格相同。当前在 MNIST/MLP 上进行了单次 8 轮实验。结果显示二者均接近无压缩基线；在目前低冗余度设置下，SRK 略优于 Kashin。下一步可研究 Kashin 冗余度、截断迭代次数和相同总通信预算下的配置，但当前不应过度宣称 Kashin 优势。
+Lloyd-Max helpers exist in `compression/quantization.py` and `compression/lloyd_max.py`, but the shared-codebook LM FL experiment is currently **not connected**. `experiments/lloyd_max.py` is an unfinished placeholder. Do not state that LM is active in the current main experiment.
 
-## 9. 后续建议（不要未经用户同意直接大改）
+## 8. Verified module status and known gaps
 
-优先级从高到低：
+### Connected and usable
 
-1. 修正 trade-off 图文字：`4 federated rounds per point` 改为 `8 federated rounds per point`，标题改为 Classification Error；
-2. 若老师要求进一步探索：在固定低 bit 下，分别测试 Kashin `iterations=5,10,20`；
-3. 再测试更高冗余度，例如 `D=131072`，对应 `lambda≈2.58`；
-4. 高冗余度会提高通信量，必须与 SRK 比较相同总 bit 预算，不能仍使用相同 b；
-5. 若需要强结论，再做多个随机种子并报告均值/标准差；当前用户暂不需要该工作。
+- `models/mnist_mlp.py`
+- `data/mnist_federated.py`
+- `federated/local_training.py`
+- `federated/evaluation.py`
+- `federated/aggregation.py` (Original update aggregation)
+- `compression/srk.py`
+- `compression/kashin_frame.py`
+- `compression/kashin_solver.py`
+- `compression/kashin_compressor.py`
+- `utils/state_dict.py`
+- `utils/communication.py`
+- `experiments/lowbit.py`
+- `tests/test_refactor_regression.py`
 
-## 10. 行为约束
+### Present but not fully connected / placeholders
 
-- 用户希望分步骤下命令给 VS Code ClaudeCode/DeepSeek 执行；不要一次给出大规模重构任务。
-- 每次先完成、运行轻量验证，再进入下一步。
-- 用户当前目标是能理解并向老师汇报，不是在写正式论文；解释应使用中文、简洁、避免过度理论化。
-- 不要为了得到“Kashin 更好”的结果而选择性调参或夸大单次实验。
+- `experiments/communication_tradeoff.py` — placeholder; it does not run the Original/SRK/Kashin unified trade-off yet.
+- `experiments/coefficient_distribution.py` — placeholder.
+- `experiments/lloyd_max.py` — placeholder; shared-codebook calibration is not restored.
+- `experiments/legacy_icml2017.py` and `compression/legacy.py` — historical placeholders; old SK/SVK pipeline not restored.
+- `utils/debug_metrics.py` — unused.
+
+Consequently, the current source can run the **low-bit SRK/Kashin experiment**, but does not yet provide a restored unified `Original vs SRK vs Fourier-Kashin` main experiment through `experiments/communication_tradeoff.py`.
+
+## 9. Tests and safe commands
+
+Compile and run regression tests (no full FL):
+
+```powershell
+& "C:\Users\zhang\.conda\envs\fl_env\python.exe" -m compileall -q config.py models data compression federated utils experiments tests 2017.py
+& "C:\Users\zhang\.conda\envs\fl_env\python.exe" tests/test_refactor_regression.py
+```
+
+Regression tests verify state dict handling, stochastic quantization validity, Fourier frame reconstruction for arbitrary D, Original/SRK/Kashin one-round aggregation, communication formulas, and FFT-vs-FWHT separation.
+
+The environment does not currently have pytest installed; run test files directly or use the regression script.
+
+## 10. Suggested next work (do not assume authorization)
+
+Recommended order:
+
+1. Restore `experiments/communication_tradeoff.py` with a proper `Original / SRK / Fourier-Kashin` experiment using centralized communication accounting.
+2. Add loss reporting if required; current evaluation returns accuracy only.
+3. Restore the LM shared-codebook experiment in `experiments/lloyd_max.py`, including explicit codebook communication accounting and privacy discussion.
+4. Run multiple seeds only after the main comparison is stable.
+5. Consider a harder dataset/model only after current MNIST results and communication accounting are reproducible.
+
+## 11. Rules for the next AI
+
+- Do not change model, MNIST partition, optimizer, local epochs, SRK transform, stochastic quantizer, or Kashin solver merely to obtain favorable results.
+- Do not add Gaussian/GaussianQR or caches.
+- Do not use FWHT/Hadamard in `FourierKashinFrame`; FWHT belongs only to SRK.
+- Do not run long experiments unless explicitly asked.
+- Do not overwrite historical result files without warning.
+- Do not claim Kashin superiority from one random seed or from unequal accuracy targets.
+- Use `KASHIN_LAMBDA` from `config.py`, not hard-coded `D=65536`, for new Fourier-Kashin experiments.
+
+## 12. Copy/paste prompt for the next chat
+
+```text
+I am continuing a modular federated-learning Kashin compression project in D:\\FL.
+Read D:\\FL\\PROJECT_HANDOFF.md first and treat it as the current source of truth.
+Do not modify code yet. First inspect the requested module(s), check Git status, and explain the smallest safe next step in Chinese.
+Important: SRK uses Hadamard/FWHT; Fourier-Kashin must always use FFT for arbitrary D. Current active experiment uses stochastic k-level quantization, not Lloyd-Max. Do not run long FL experiments unless I explicitly ask.
+```
