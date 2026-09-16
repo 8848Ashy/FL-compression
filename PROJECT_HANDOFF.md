@@ -1,7 +1,7 @@
 # FL Kashin Compression Project — Current Handoff
 
-**Updated:** 2026-09-11  
-**Project root:** `D:\FL`  
+**Updated:** 2026-09-15  
+**Project root:** `D:\FL` (dev), `/home/hczhang/FL` (GPU server, env `/home/hczhang/flenv`)  
 **Python environment:** `C:\Users\zhang\.conda\envs\fl_env\python.exe`
 
 ## 1. Research objective
@@ -23,9 +23,9 @@ Do not claim Kashin is better unless the observed accuracy difference and commun
 - Parameter dimension: `d = 50890`
 - Clients: 10
 - Data per client: 600 consecutive MNIST training examples
-- Test set: first 1000 MNIST test examples
+- Test set: first 10000 MNIST test examples (full test set; raised from 1000 to cut evaluation noise to ±0.27%)
 - Local training: SGD, learning rate 0.05, 2 local epochs
-- Default main rounds: 8
+- Default main rounds: 50 (`NUM_ROUNDS_FOCUS`)
 - Seeds: model seed 42; Fourier-Kashin experiment seed 2026
 
 Updates, not full model parameters, are uploaded:
@@ -131,6 +131,14 @@ Defensible interpretation:
 - Kashin 4-bit is close to SRK 8-bit in this single run while sending ~22.3% less traffic.
 - This is single-seed MNIST/MLP evidence only. It is not enough for a general superiority claim.
 
+### Variance reduction and distortion instrumentation (2026-09-15)
+
+- Multi-seed (5 seeds, old 8-round/1000-test config) showed every config within 89.4–89.9% with std 0.19–0.51%: at b>=2 the accuracy differences are below the noise floor. Diagnosis: per-client relative squared compression error at b=2 is already ~1% (`results/quantizer_distortion.csv`), and 10-client averaging shrinks it further, so test accuracy cannot resolve bits>=2 or lambda effects.
+- New optional instrumentation on `federated_round_srk_update` / `federated_round_kashin_update`: `quant_seeds` (per-client seeds feeding a dedicated quantizer generator) and `relerr_out` (list that receives per-client `||delta_hat - delta||^2 / ||delta||^2`). Default call signature behavior is unchanged.
+- New common-random-number (CRN) pairing, toggled by `config.CRN_PAIRED = True`: `build_mnist_federated_data(..., paired_shuffle=True)` gives each client loader its own generator; `experiments/lowbit.py` re-seeds shuffle per (round, client) and quantization per (round, client), so all compared variants see identical data order and quantizer randomness. Each run is still stochastic; only the comparison is paired (variance reduction, not determinism).
+- New outputs: `relerr2` / `relerr2_max` columns in `kashin_lowbit_round_metrics.csv`, `results/kashin_relerr2_summary.csv`, `plots/kashin_relerr2_tradeoff_*.png`, `plots/multi_seed_relerr2.png`, relerr columns in `multi_seed_*.csv`.
+- Use the relerr2 (distortion) curves as the primary evidence for lambda/bits trends; accuracy remains endpoint validation.
+
 ### Fourier lambda ablation (frame-level, not full FL)
 
 `kashin_ablation/frame_benchmark.py` runs a real-update Fourier frame diagnostic across lambda values. The generated lambda report and plots are under `kashin_ablation/results/`.
@@ -166,6 +174,7 @@ Lloyd-Max helpers exist in `compression/quantization.py` and `compression/lloyd_
 - `utils/communication.py`
 - `experiments/lowbit.py`
 - `tests/test_refactor_regression.py`
+- `tests/test_crn_relerr.py`
 
 ### Present but not fully connected / placeholders
 
@@ -184,6 +193,7 @@ Compile and run regression tests (no full FL):
 ```powershell
 & "C:\Users\zhang\.conda\envs\fl_env\python.exe" -m compileall -q config.py models data compression federated utils experiments tests 2017.py
 & "C:\Users\zhang\.conda\envs\fl_env\python.exe" tests/test_refactor_regression.py
+& "C:\Users\zhang\.conda\envs\fl_env\python.exe" tests/test_crn_relerr.py
 ```
 
 Regression tests verify state dict handling, stochastic quantization validity, Fourier frame reconstruction for arbitrary D, Original/SRK/Kashin one-round aggregation, communication formulas, and FFT-vs-FWHT separation.
@@ -208,6 +218,7 @@ Recommended order:
 - Do not run long experiments unless explicitly asked.
 - Do not overwrite historical result files without warning.
 - Do not claim Kashin superiority from one random seed or from unequal accuracy targets.
+- CRN pairing and relerr instrumentation are measurement tools only; do not let them alter model, optimizer, SRK transform, quantizer, or Kashin solver mathematics.
 - Use `KASHIN_LAMBDA` from `config.py`, not hard-coded `D=65536`, for new Fourier-Kashin experiments.
 
 ## 12. Copy/paste prompt for the next chat

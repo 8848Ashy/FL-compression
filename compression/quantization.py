@@ -1,7 +1,7 @@
 import torch
 
 
-def stochastic_k_level_quantize(X_tensor, k_levels):
+def stochastic_k_level_quantize(X_tensor, k_levels, generator=None):
     X_max, X_min = torch.max(X_tensor), torch.min(X_tensor)
     scale = X_max - X_min
     if scale < 1e-8:
@@ -9,7 +9,11 @@ def stochastic_k_level_quantize(X_tensor, k_levels):
     normalized = (X_tensor - X_min) / scale * (k_levels - 1)
     r = torch.floor(normalized).long(); r = torch.clamp(r, 0, k_levels - 2)
     prob = normalized - r
-    is_upper = (torch.rand_like(X_tensor) < prob).float()
+    if generator is None:
+        is_upper = (torch.rand_like(X_tensor) < prob).float()
+    else:
+        # generator must live on the same device as X_tensor
+        is_upper = (torch.rand(X_tensor.shape, generator=generator, dtype=X_tensor.dtype, device=X_tensor.device) < prob).float()
     quantized_r = r.float() + is_upper
     return X_min + quantized_r * scale / (k_levels - 1), quantized_r.long()
 

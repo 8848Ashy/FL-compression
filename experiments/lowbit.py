@@ -14,7 +14,12 @@ from compression.kashin_frame import FourierKashinFrame
 from compression.kashin_compressor import federated_round_kashin_update
 
 
-def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, rounds=8, seed=2026, save_outputs=True):
+def _crn_seed_list(seed, round_index, num_clients, salt):
+    return [(seed + salt) * 1_000_000 + round_index * 100 + client_id for client_id in range(num_clients)]
+
+
+def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, rounds=8, seed=2026,
+                                 save_outputs=True, crn_paired=True):
     root = Path(__file__).resolve().parents[1]; results = root / "results"; plots = root / "plots"
     results.mkdir(exist_ok=True); plots.mkdir(exist_ok=True)
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -32,18 +37,28 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
         encoded_dim = srk_D if kind == "SRK" else frames[lam].D
         return encoded_dim * bits + 64
     print(f"SRK-2bit: {traffic('SRK', 2)} bits/client/round; Kashin-2bit-lambda1: {traffic('Kashin', 2, 1.0)} bits/client/round")
+    if crn_paired and getattr(client_loaders[0], "generator", None) is None:
+        print("crn_paired: loaders have no shuffle generator (built without paired_shuffle); only quantization noise is paired")
     for r in range(rounds):
         deltas = {name: [] for name, _, _, _ in specs}
+        shuffle_seeds = _crn_seed_list(seed, r, num_clients, 0) if crn_paired else None
         for client_id in range(num_clients):
+            if shuffle_seeds is not None:
+                loader_generator = getattr(client_loaders[client_id], "generator", None)
+                if loader_generator is not None: loader_generator.manual_seed(shuffle_seeds[client_id])
             for name in deltas: deltas[name].append(local_train_delta(models[name], client_loaders[client_id], epochs=2))
+        quant_seeds = _crn_seed_list(seed, r, num_clients, 1) if crn_paired else None
         for name, kind, bits, lam in specs:
-            k = 2 ** bits
-            if kind == "SRK": federated_round_srk_update(models[name], deltas[name], k, rotation_seed=seed * 1000 + bits * 100 + r)
-            elif kind == "Original": federated_round_original_update(models[name], deltas[name])
-            else: federated_round_kashin_update(models[name], deltas[name], k, frames[lam], iterations=10)
+            k = 2 ** bits; relerrs = []
+            if kind == "SRK": federated_round_srk_update(models[name], deltas[name], k, rotation_seed=seed * 1000 + bits * 100 + r,
+                                                         quant_seeds=quant_seeds, relerr_out=relerrs)
+            elif kind == "Original": federated_round_original_update(models[name], deltas[name]); relerrs = [0.0] * num_clients
+            else: federated_round_kashin_update(models[name], deltas[name], k, frames[lam], iterations=10,
+                                                quant_seeds=quant_seeds, relerr_out=relerrs)
             cumulative[name] += traffic(kind, bits, lam) * num_clients
             rows.append({"method": kind, "label": name, "bits": bits, "lambda": lam,
                          "round": r + 1, "accuracy": evaluate_model(models[name], test_loader),
+                         "relerr2": float(np.mean(relerrs)), "relerr2_max": float(np.max(relerrs)),
                          "total_bits": cumulative[name], "communication_MB": cumulative[name] / 8 / 1024 / 1024,
                          "normalized_bits": traffic(kind, bits, lam) / d,
                          "cumulative_normalized_bits": traffic(kind, bits, lam) * (r + 1) / d})
@@ -86,5 +101,28 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
     for name, _, _, _ in specs:
         s = [x for x in target_rows if x["method"] == name and x["status"] == "REACHED"]; ax.plot([x["target_accuracy"] for x in s], [float(x["communication_MB"]) for x in s], marker="o", label=name)
     ax.set_xlabel("Target Accuracy (%)"); ax.set_ylabel("Communication (MB)"); ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"kashin_lowbit_target_accuracy_{run_stamp}.png", dpi=300); plt.close(fig)
-    print("[PASS] three low-bit figures saved")
+    relerr_summary = []
+    for name, kind, bits, lam in specs:
+        values = [x["relerr2"] for x in rows if x["label"] == name]
+        relerr_summary.append({"label": name, "method": kind, "bits": bits, "lambda": lam,
+                               "normalized_bits": traffic(kind, bits, lam) / d, "relerr2": float(np.mean(values))})
+    with (results / "kashin_relerr2_summary.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(relerr_summary[0])); w.writeheader(); w.writerows(relerr_summary)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for bits in (2, 4, 8, 16):
+        srk = [x for x in relerr_summary if x["method"] == "SRK" and x["bits"] == bits]
+        if srk:
+            ax.scatter(srk[0]["normalized_bits"], srk[0]["relerr2"], color="black", marker=markers[bits], s=75, label=f"SRK b={bits}")
+        kline = sorted([x for x in relerr_summary if x["method"] == "Kashin" and x["bits"] == bits], key=lambda x: x["lambda"])
+        if kline:
+            ax.plot([x["normalized_bits"] for x in kline], [x["relerr2"] for x in kline], marker="o", color=colors[bits], label=f"Kashin b={bits}")
+            for x in kline:
+                ax.annotate(f"λ={x['lambda']:g}", (x["normalized_bits"], x["relerr2"]), xytext=(3, 3), textcoords="offset points", fontsize=7)
+    ax.set_yscale("log"); ax.set_xlabel("Per-round Communication (bit/dim/client)")
+    ax.set_ylabel("Mean relative squared error  ||delta_hat - delta||^2 / ||delta||^2")
+    ax.set_title("Compression Distortion vs Communication: SRK vs Kashin λ Sweep")
+    ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"kashin_relerr2_tradeoff_{run_stamp}.png", dpi=300); plt.close(fig)
+    print("mean relative squared compression error per configuration:")
+    for x in relerr_summary: print(f"  {x['label']:28s} {x['relerr2']:.6e}")
+    print("[PASS] four low-bit figures + relerr2 summary saved")
     return rows
