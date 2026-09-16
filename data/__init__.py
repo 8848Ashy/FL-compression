@@ -1,0 +1,1 @@
+from .mnist_federated import build_mnist_federated_data

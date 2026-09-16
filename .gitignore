@@ -6,7 +6,7 @@ venv/
 env/
 
 # Local datasets and generated experiment outputs
-data/
+data/MNIST/
 *.png
 *.jpg
 *.jpeg
