@@ -17,6 +17,7 @@ from data.mnist_federated import build_mnist_federated_data
 from experiments.lowbit import run_kashin_lowbit_experiment
 
 SEEDS = [0, 1, 2, 3, 4]
+FIXED_BUDGETS = [8, 16, 32, 64, 128, 256, 512]
 
 
 def main():
@@ -27,6 +28,7 @@ def main():
                                                              paired_shuffle=config.CRN_PAIRED)
 
     final_rows = []
+    fixed_budget_rows = []
     for seed in SEEDS:
         print(f"===== seed {seed} =====", flush=True)
         torch.manual_seed(seed); np.random.seed(seed)
@@ -37,6 +39,16 @@ def main():
         final_rows += [{"seed": seed, "label": r["label"], "method": r["method"], "bits": r["bits"],
                         "lambda": r["lambda"], "normalized_bits": r["normalized_bits"],
                         "accuracy": r["accuracy"], "relerr2": r["relerr2"]} for r in rows if r["round"] == last]
+        for budget in FIXED_BUDGETS:
+            for label in sorted({r["label"] for r in rows}):
+                eligible = [r for r in rows if r["label"] == label and r["cumulative_normalized_bits"] <= budget]
+                if not eligible:
+                    continue
+                point = max(eligible, key=lambda r: r["round"])
+                fixed_budget_rows.append({"seed": seed, "budget_normalized_bits": budget,
+                                          "label": point["label"], "method": point["method"],
+                                          "bits": point["bits"], "lambda": point["lambda"],
+                                          "round": point["round"], "accuracy": point["accuracy"]})
 
     labels = []
     for r in final_rows:
@@ -56,6 +68,30 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(final_rows[0])); w.writeheader(); w.writerows(final_rows)
     with (results / "multi_seed_summary.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(summary[0])); w.writeheader(); w.writerows(summary)
+    with (results / "multi_seed_fixed_budget_raw.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(fixed_budget_rows[0])); w.writeheader(); w.writerows(fixed_budget_rows)
+
+    frontier_by_seed = []
+    for seed in SEEDS:
+        for budget in FIXED_BUDGETS:
+            for method in ("SRK", "Kashin", "Original"):
+                candidates = [x for x in fixed_budget_rows if x["seed"] == seed
+                              and x["budget_normalized_bits"] == budget and x["method"] == method]
+                if candidates:
+                    frontier_by_seed.append({**max(candidates, key=lambda x: x["accuracy"]),
+                                             "frontier_method": method})
+    frontier_summary = []
+    for budget in FIXED_BUDGETS:
+        for method in ("SRK", "Kashin", "Original"):
+            values = [x["accuracy"] * 100 for x in frontier_by_seed
+                      if x["budget_normalized_bits"] == budget and x["frontier_method"] == method]
+            if values:
+                frontier_summary.append({"budget_normalized_bits": budget, "method": method,
+                                         "mean_acc": float(np.mean(values)),
+                                         "std_acc": float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
+                                         "n_seeds": len(values)})
+    with (results / "multi_seed_fixed_budget_summary.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(frontier_summary[0])); w.writeheader(); w.writerows(frontier_summary)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     colors = {2: "tab:blue", 4: "tab:orange", 8: "tab:green", 16: "tab:red"}
@@ -100,6 +136,20 @@ def main():
     ax.set_title(f"Multi-seed (n={len(SEEDS)}) Compression Distortion: mean +/- std")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout()
     fig.savefig(plots / f"{run_stamp}_multi_seed_relerr2.png", dpi=300); plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    frontier_colors = {"SRK": "tab:blue", "Kashin": "tab:orange", "Original": "tab:green"}
+    for method, color in frontier_colors.items():
+        series = [x for x in frontier_summary if x["method"] == method]
+        if series:
+            ax.errorbar([x["budget_normalized_bits"] for x in series], [x["mean_acc"] for x in series],
+                        yerr=[x["std_acc"] for x in series], marker="o", capsize=4,
+                        color=color, label=f"{method} frontier")
+    ax.set_xlabel("Fixed cumulative communication budget (bit/dim/client)")
+    ax.set_ylabel("Accuracy at last round within budget (%)")
+    ax.set_title(f"Multi-seed fixed-budget accuracy trade-off (n={len(SEEDS)})")
+    ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout()
+    fig.savefig(plots / f"{run_stamp}_multi_seed_fixed_budget.png", dpi=300); plt.close(fig)
 
     print("[PASS] multi-seed summary + figures saved")
     for s in summary:
