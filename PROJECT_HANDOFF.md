@@ -1,6 +1,6 @@
 # FL Kashin Compression Project — Current Handoff
 
-**Updated:** 2026-09-15  
+**Updated:** 2026-09-17
 **Project root:** `D:\FL` (dev), `/home/hczhang/FL` (GPU server, env `/home/hczhang/flenv`)  
 **Python environment:** `C:\Users\zhang\.conda\envs\fl_env\python.exe`
 
@@ -16,7 +16,43 @@ The research question is **not** “does Kashin always beat SRK at the same bit 
 
 Do not claim Kashin is better unless the observed accuracy difference and communication budget support it.
 
-## 2. Fixed experimental setup
+## 2. Development, GitHub, and server deployment workflow
+
+**`D:\FL` is the only place to author code.** Do not edit source, configuration, or experiment scripts directly on the GPU server or through its mounted drive. Every code change follows one route:
+
+```text
+D:\FL edit → local quick checks → commit → push GitHub → server pull → verify same commit → run → collect results
+```
+
+Before local work, run `git status --short` and `git pull --ff-only origin master`. Before a server run, record `git rev-parse --short HEAD`; it must equal the commit just pushed from `D:\FL`. Do not use a merge pull, reset, force-push, or manual file copying to resolve a version mismatch.
+
+If an emergency server edit is unavoidable, stop before running an experiment: copy the change back to `D:\FL`, review it, commit and push locally, then re-pull the committed version on the server. An uncommitted server edit is never a valid experiment source.
+
+Generated results are ignored by Git. For every meaningful server run, keep a timestamped output directory and add a concise `OPENCODE_SESSION_LOG.md` entry containing the commit, command, environment/GPU, key configuration, output path, and conclusion. Copy selected results back locally for review without overwriting history.
+
+### Standard commands
+
+Local (`D:\FL`):
+
+```powershell
+git pull --ff-only origin master
+& "C:\Users\zhang\.conda\envs\fl_env\python.exe" tests/test_refactor_regression.py
+& "C:\Users\zhang\.conda\envs\fl_env\python.exe" tests/test_crn_relerr.py
+git add <intended files>
+git commit -m "<clear change summary>"
+git push origin master
+git rev-parse --short HEAD
+```
+
+Server (`~/FL`):
+
+```bash
+git pull --ff-only origin master
+git rev-parse --short HEAD
+# Confirm this equals the local pushed hash before running.
+```
+
+## 3. Fixed experimental setup
 
 - Dataset: MNIST
 - Model: MLP `784 -> 64 -> 10`
@@ -37,7 +73,7 @@ global_next = global + average(compressed(delta_w_i))
 
 Without compression, averaging deltas then adding back is numerically equivalent to averaging local models (tested at approximately `1e-9` maximum difference).
 
-## 3. Current project architecture
+## 4. Current project architecture
 
 ```text
 2017.py                    thin main entry
@@ -60,7 +96,7 @@ results/, plots/           generated main-experiment outputs
 - `D` can be any integer: `D = round(lambda * d)`.
 - Main selected lambda is configured in `config.py` as `KASHIN_LAMBDA = 2.0`.
 
-## 4. Current main runnable experiment
+## 5. Current main runnable experiment
 
 Run from `D:\FL`:
 
@@ -69,25 +105,23 @@ $env:MPLBACKEND="Agg"
 & "C:\Users\zhang\.conda\envs\fl_env\python.exe" 2017.py
 ```
 
-Current `config.py` has `RUN_FULL_EXPERIMENT = True` and `RUN_LOWBIT_EXPERIMENT = True`; therefore the current entry runs the **low-bit SRK vs Fourier-Kashin experiment**:
+Current `config.py` has `RUN_FULL_EXPERIMENT = True`, `RUN_LOWBIT_EXPERIMENT = True`, `NUM_ROUNDS_FOCUS = 50`, and `CRN_PAIRED = True`. The entry runs a **50-round paired SRK/Fourier-Kashin lambda sweep**, plus the uncompressed Original reference:
 
 ```text
-SRK-2bit  vs Kashin(lambda=2)-1bit
-SRK-4bit  vs Kashin(lambda=2)-2bit
-SRK-8bit  vs Kashin(lambda=2)-4bit
+Original
+SRK at 2, 4, 8, and 16 bits
+Kashin at 2, 4, and 8 bits, each with lambda = 1, 1.5, 2, 2.5, and 3
 ```
 
-It runs 8 FL rounds with 10 clients, then writes:
+With `CRN_PAIRED=True`, every variant receives the same per-round client shuffle and quantizer random draws. This improves comparison precision; it does not change the algorithms. The run writes timestamped figures and these tabular summaries:
 
 - `results/kashin_lowbit_round_metrics.csv`
 - `results/kashin_accuracy_saving.csv`
-- `plots/kashin_lowbit_accuracy_communication.png`
-- `plots/kashin_lowbit_normalized_communication.png`
-- `plots/kashin_lowbit_target_accuracy.png`
+- `results/kashin_relerr2_summary.csv`
 
-This experiment overwrites only those named low-bit output files when rerun. Historical result files should otherwise be preserved.
+The tracked local figures are historical pre-CRN 8-round outputs, not results of the current code. Preserve every new server run under a timestamped directory and record its commit.
 
-## 5. Communication accounting (authoritative)
+## 6. Communication accounting (authoritative)
 
 All formulas are centralized in `utils/communication.py`.
 
@@ -112,9 +146,9 @@ For this model:
 
 These entries are **bits per client per round**. Never claim SRK and Kashin have the same communication merely because they use the same quantizer bit width.
 
-## 6. Current quantitative findings
+## 7. Current quantitative findings
 
-### Low-bit main experiment (single seed, 8 rounds)
+### Historical low-bit experiment (single seed, 8 rounds; pre-CRN)
 
 Final values in `results/kashin_bit_tradeoff.csv`:
 
@@ -145,7 +179,7 @@ Defensible interpretation:
 
 Observed trend: larger lambda reduces the coefficient peak ratio but increases coefficient count and communication. It does **not** establish the best lambda for full FL by itself.
 
-## 7. Current quantization status
+## 8. Current quantization status
 
 The active SRK/Kashin main experiment uses:
 
@@ -157,7 +191,7 @@ Location: `compression/quantization.py`.
 
 Lloyd-Max helpers exist in `compression/quantization.py` and `compression/lloyd_max.py`, but the shared-codebook LM FL experiment is currently **not connected**. `experiments/lloyd_max.py` is an unfinished placeholder. Do not state that LM is active in the current main experiment.
 
-## 8. Verified module status and known gaps
+## 9. Verified module status and known gaps
 
 ### Connected and usable
 
@@ -186,7 +220,7 @@ Lloyd-Max helpers exist in `compression/quantization.py` and `compression/lloyd_
 
 Consequently, the current source can run the **low-bit SRK/Kashin experiment**, but does not yet provide a restored unified `Original vs SRK vs Fourier-Kashin` main experiment through `experiments/communication_tradeoff.py`.
 
-## 9. Tests and safe commands
+## 10. Tests and safe commands
 
 Compile and run regression tests (no full FL):
 
@@ -200,7 +234,7 @@ Regression tests verify state dict handling, stochastic quantization validity, F
 
 The environment does not currently have pytest installed; run test files directly or use the regression script.
 
-## 10. Suggested next work (do not assume authorization)
+## 11. Suggested next work (do not assume authorization)
 
 Recommended order:
 
@@ -210,7 +244,7 @@ Recommended order:
 4. Run multiple seeds only after the main comparison is stable.
 5. Consider a harder dataset/model only after current MNIST results and communication accounting are reproducible.
 
-## 11. Rules for the next AI
+## 12. Rules for the next AI
 
 - Do not change model, MNIST partition, optimizer, local epochs, SRK transform, stochastic quantizer, or Kashin solver merely to obtain favorable results.
 - Do not add Gaussian/GaussianQR or caches.
@@ -220,12 +254,16 @@ Recommended order:
 - Do not claim Kashin superiority from one random seed or from unequal accuracy targets.
 - CRN pairing and relerr instrumentation are measurement tools only; do not let them alter model, optimizer, SRK transform, quantizer, or Kashin solver mathematics.
 - Use `KASHIN_LAMBDA` from `config.py`, not hard-coded `D=65536`, for new Fourier-Kashin experiments.
+- Before modifying code, synchronize `D:\FL` with GitHub using `git pull --ff-only origin master`; do not write code on the server as a shortcut.
+- Before every server experiment, verify the server HEAD equals the local pushed commit and record that hash with the results.
+- `PROJECT_HANDOFF.md` is a maintained project specification: update it only when a committed change makes its workflow, configuration, architecture, or conclusions inaccurate. Append ordinary run notes to `OPENCODE_SESSION_LOG.md` instead.
 
-## 12. Copy/paste prompt for the next chat
+## 13. Copy/paste prompt for the next chat
 
 ```text
 I am continuing a modular federated-learning Kashin compression project in D:\\FL.
-Read D:\\FL\\PROJECT_HANDOFF.md first and treat it as the current source of truth.
-Do not modify code yet. First inspect the requested module(s), check Git status, and explain the smallest safe next step in Chinese.
-Important: SRK uses Hadamard/FWHT; Fourier-Kashin must always use FFT for arbitrary D. Current active experiment uses stochastic k-level quantization, not Lloyd-Max. Do not run long FL experiments unless I explicitly ask.
+First run `git status --short` and `git pull --ff-only origin master`, then read D:\\FL\\PROJECT_HANDOFF.md and treat it as the current source of truth.
+Do not modify code yet. Inspect the requested module(s), identify the smallest safe next step in Chinese, and do not run a long experiment unless I explicitly ask.
+For every code change, use only D:\\FL → quick checks → commit → push → server `git pull --ff-only` → verify matching commit → run. Do not edit server code directly. Record every meaningful server result with its Git hash in OPENCODE_SESSION_LOG.md.
+Important: SRK uses Hadamard/FWHT; Fourier-Kashin must always use FFT for arbitrary D. The active experiment uses stochastic k-level quantization, CRN pairing, and per-round relerr2 instrumentation—not Lloyd-Max.
 ```
