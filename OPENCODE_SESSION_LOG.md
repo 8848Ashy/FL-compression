@@ -87,3 +87,29 @@ D:\FL\PROJECT_HANDOFF.md 只可作只读背景参考，绝对不要修改它。
 **下一步：**
 
 - 写入 9.14.pptx 第 4 页；λ-失真曲线（E1）、b=1 极端区 λ-精度曲线（E2）两个实验待做。
+
+---
+
+## 2026-09-17 · 会话 3：三客户端固定通信预算 tradeoff 实验
+
+**讨论要点：**
+
+- 用户希望直接观察准确率与真实通信开销的 tradeoff，并同意将低比特敏感性实验改为 3 个客户端；10 客户端设置继续保留为基线。
+- 删除累计总通信量—每轮准确率和累计归一化通信量—每轮准确率两类拥挤图，改为固定累计通信预算下的准确率报告。
+- 图文件时间戳改为文件名前缀；服务器旧图已按实际修改时间重命名，旧的两类累计通信图已删除。
+
+**代码与版本：**
+
+- GitHub/服务器提交：`75297a6`（3 客户端配置）及 `33ba6ff`（多 seed 固定预算报告）。
+- 服务器运行命令：`CUDA_VISIBLE_DEVICES=1 MPLBACKEND=Agg /home/hczhang/flenv/bin/python 2017.py`。
+- 运行日志：`/home/hczhang/FL/run_lowbit_3clients_current.log`。
+
+**结果：**
+
+- 新增 `results/fixed_budget_accuracy.csv` 和 `results/fixed_budget_frontier.csv`。
+- 新图：`plots/20260917_170524_fixed_budget_accuracy.png`、`plots/20260917_170524_kashin_lambda_tradeoff_per_dim.png`、`plots/20260917_170524_kashin_relerr2_tradeoff.png`。
+- 三客户端单 seed frontier：在 16、32、64、128、256、512 bit/dim/client 预算点，Kashin 准确率略高于 SRK；预算 8 点 Kashin 略低。该结果说明减少客户端后压缩差异更可见，但仍需多 seed 固定预算汇总才能作最终结论。
+
+**下一步：**
+
+- 运行 `run_multi_seed.py` 生成 `multi_seed_fixed_budget_summary.csv` 和带误差棒的固定预算图。
