@@ -1,10 +1,38 @@
 # FL Kashin Compression Project — Current Handoff
 
-**Updated:** 2026-09-17
+**Updated:** 2026-09-18
 **Project root:** `D:\FL` (dev), `/home/hczhang/FL` (GPU server, env `/home/hczhang/flenv`)  
-**Python environment:** `C:\Users\zhang\.conda\envs\fl_env\python.exe`
+**Experiment Python:** `/home/hczhang/flenv/bin/python` on server; older local environment paths below are historical and must be checked before use.
 
 ## 1. Research objective
+
+### Current evidence and controlled accuracy protocol (2026-09-18)
+
+Completed `experiments.matched_accuracy`: 5 seeds × 9 configurations × 50 rounds,
+fixed 6000 training examples across 10 clients, 3 participants per round. Explicit
+per-seed/round/client minibatches pair data order across configurations. Primary
+endpoint is round 50; secondary targets are 85/90/92%, with no test-best selection.
+Same-width compressed methods send D=65536 coefficients plus 64 endpoint bits.
+This D is an explicit matched-SRK experimental control, not a global lambda default.
+Results: `results/20260918_003054_matched_accuracy/`, experiment commit `622c60c`.
+
+Legacy 1-bit Kashin improves mean final accuracy by 0.144 percentage points over
+SRK (92.928% versus 92.784%), but only five seeds and multiple comparisons limit
+inference. Balanced 1-bit improves by 0.094 points; its paired interval spans zero.
+There is no stable target-accuracy communication gain: 92% needs 21.2 rounds for
+SRK 1-bit versus 21.8 for both Kashin variants. Do not claim universal superiority.
+
+`experiments.loss_probe` provides exploratory same-input one-step loss/accuracy
+checks at rounds 1/15/50, five seeds and eight rounding draws. Result directory
+`results/20260918_004211_loss_probe/`, code commit `3c22ca4`. Early 1-bit harm is
+reduced, but late accuracy effects are near zero. This is not a curvature proof.
+`experiments.summarize_matched_accuracy` validates accounting and generates
+paired accuracy/communication plots plus fixed-budget tables without retraining.
+
+Read `results/Matched_Accuracy_Report_20260918.md` for conclusions and
+`docs/Research_Overview_20260918.md` for the rationale and teacher-facing Q&A.
+Next research candidate is legacy 1-bit on an independently specified harder task
+with a strong baseline and compute accounting; balanced remains an ablation.
 
 ### Active direction: matched-input aggregation distortion (2026-09-17)
 
@@ -275,7 +303,11 @@ The environment does not currently have pytest installed; run test files directl
 
 ## 11. Suggested next work (do not assume authorization)
 
-Recommended order:
+The following list is historical; the controlled protocols in section 1 supersede
+items 1, 2 and 4 for the current comparison. Do not restore legacy experiments just
+because this list mentions them. New long runs require user authorization.
+
+Historical order:
 
 1. Restore `experiments/communication_tradeoff.py` with a proper `Original / SRK / Fourier-Kashin` experiment using centralized communication accounting.
 2. Add loss reporting if required; current evaluation returns accuracy only.
@@ -292,7 +324,7 @@ Recommended order:
 - Do not overwrite historical result files without warning.
 - Do not claim Kashin superiority from one random seed or from unequal accuracy targets.
 - CRN pairing and relerr instrumentation are measurement tools only; do not let them alter model, optimizer, SRK transform, quantizer, or Kashin solver mathematics.
-- Use `KASHIN_LAMBDA` from `config.py`, not hard-coded `D=65536`, for new Fourier-Kashin experiments.
+- Use `KASHIN_LAMBDA` for general Fourier-Kashin sweeps. The matched-input and matched-accuracy protocols deliberately fix D=65536 to match SRK payloads; preserve and document that exception.
 - Before modifying code, synchronize `D:\FL` with GitHub using `git pull --ff-only origin master`; do not write code on the server as a shortcut.
 - Before every server experiment, verify the server HEAD equals the local pushed commit and record that hash with the results.
 - `PROJECT_HANDOFF.md` is a maintained project specification: update it only when a committed change makes its workflow, configuration, architecture, or conclusions inaccurate. Append ordinary run notes to `OPENCODE_SESSION_LOG.md` instead.
