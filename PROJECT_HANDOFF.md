@@ -105,7 +105,7 @@ $env:MPLBACKEND="Agg"
 & "C:\Users\zhang\.conda\envs\fl_env\python.exe" 2017.py
 ```
 
-Current `config.py` has `RUN_FULL_EXPERIMENT = True`, `RUN_LOWBIT_EXPERIMENT = True`, `NUM_ROUNDS_FOCUS = 50`, `CRN_PAIRED = True`, and `LOWBIT_NUM_CLIENTS = 2`. The entry runs a **50-round paired SRK/Fourier-Kashin lambda sweep** as a two-client sensitivity experiment, plus the uncompressed Original reference. The fixed 10-client setup remains the baseline configuration in `NUM_CLIENTS` and is not silently replaced.
+Current `config.py` has `RUN_FULL_EXPERIMENT = True`, `RUN_LOWBIT_EXPERIMENT = True`, `NUM_ROUNDS_FOCUS = 50`, `CRN_PAIRED = True`, and `LOWBIT_NUM_CLIENTS = 3`. The entry runs a **50-round paired SRK/Fourier-Kashin lambda sweep** as a three-client sensitivity experiment, plus the uncompressed Original reference. The fixed 10-client setup remains the baseline configuration in `NUM_CLIENTS` and is not silently replaced.
 
 ```text
 Original
