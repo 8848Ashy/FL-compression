@@ -5,6 +5,7 @@ mean +/- std of the final-round test accuracy for every configuration
 and plots the trade-off figure with error bars.
 """
 import csv
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -22,14 +23,14 @@ def main():
     root = Path(__file__).resolve().parent
     results = root / "results"; plots = root / "plots"
     results.mkdir(exist_ok=True); plots.mkdir(exist_ok=True)
-    client_loaders, test_loader = build_mnist_federated_data(num_clients=config.NUM_CLIENTS, images_per_client=config.IMAGES_PER_CLIENT,
+    client_loaders, test_loader = build_mnist_federated_data(num_clients=config.LOWBIT_NUM_CLIENTS, images_per_client=config.LOWBIT_IMAGES_PER_CLIENT,
                                                              paired_shuffle=config.CRN_PAIRED)
 
     final_rows = []
     for seed in SEEDS:
         print(f"===== seed {seed} =====", flush=True)
         torch.manual_seed(seed); np.random.seed(seed)
-        rows = run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=config.NUM_CLIENTS,
+        rows = run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=config.LOWBIT_NUM_CLIENTS,
                                             rounds=config.NUM_ROUNDS_FOCUS, seed=seed, save_outputs=False,
                                             crn_paired=config.CRN_PAIRED)
         last = config.NUM_ROUNDS_FOCUS
@@ -76,7 +77,8 @@ def main():
     ax.set_xlabel("Per-round Communication (bit/dim/client)"); ax.set_ylabel("Test Accuracy (%)")
     ax.set_title(f"Multi-seed (n={len(SEEDS)}) Accuracy-Communication Trade-off: mean +/- std")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout()
-    fig.savefig(plots / "multi_seed_tradeoff.png", dpi=300); plt.close(fig)
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fig.savefig(plots / f"{run_stamp}_multi_seed_tradeoff.png", dpi=300); plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     for bits in (2, 4, 8, 16):
@@ -97,7 +99,7 @@ def main():
     ax.set_ylabel("Mean relative squared error")
     ax.set_title(f"Multi-seed (n={len(SEEDS)}) Compression Distortion: mean +/- std")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout()
-    fig.savefig(plots / "multi_seed_relerr2.png", dpi=300); plt.close(fig)
+    fig.savefig(plots / f"{run_stamp}_multi_seed_relerr2.png", dpi=300); plt.close(fig)
 
     print("[PASS] multi-seed summary + figures saved")
     for s in summary:

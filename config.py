@@ -15,5 +15,9 @@ MODEL_SEED = 42
 EXPERIMENT_SEED = 2026
 NUM_CLIENTS = 10
 IMAGES_PER_CLIENT = 600
+# Fewer clients make compression noise less diluted by client averaging.
+# NUM_CLIENTS=10 remains the main baseline; this is the tradeoff sensitivity run.
+LOWBIT_NUM_CLIENTS = 2
+LOWBIT_IMAGES_PER_CLIENT = 600
 CRN_PAIRED = True
 

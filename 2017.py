@@ -72,9 +72,9 @@ def main():
         print("Lightweight validation mode; no full FL experiment requested.")
         return
     if config.RUN_LOWBIT_EXPERIMENT:
-        client_loaders, test_loader = build_mnist_federated_data(num_clients=config.NUM_CLIENTS, images_per_client=config.IMAGES_PER_CLIENT,
+        client_loaders, test_loader = build_mnist_federated_data(num_clients=config.LOWBIT_NUM_CLIENTS, images_per_client=config.LOWBIT_IMAGES_PER_CLIENT,
                                                                  paired_shuffle=config.CRN_PAIRED)
-        run_kashin_lowbit_experiment(client_loaders, test_loader, config.NUM_CLIENTS, config.NUM_ROUNDS_FOCUS, config.EXPERIMENT_SEED,
+        run_kashin_lowbit_experiment(client_loaders, test_loader, config.LOWBIT_NUM_CLIENTS, config.NUM_ROUNDS_FOCUS, config.EXPERIMENT_SEED,
                                      crn_paired=config.CRN_PAIRED)
     else:
         print(f"Modular project is ready. Configured Kashin lambda={config.KASHIN_LAMBDA}.")

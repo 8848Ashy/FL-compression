@@ -105,7 +105,7 @@ $env:MPLBACKEND="Agg"
 & "C:\Users\zhang\.conda\envs\fl_env\python.exe" 2017.py
 ```
 
-Current `config.py` has `RUN_FULL_EXPERIMENT = True`, `RUN_LOWBIT_EXPERIMENT = True`, `NUM_ROUNDS_FOCUS = 50`, and `CRN_PAIRED = True`. The entry runs a **50-round paired SRK/Fourier-Kashin lambda sweep**, plus the uncompressed Original reference:
+Current `config.py` has `RUN_FULL_EXPERIMENT = True`, `RUN_LOWBIT_EXPERIMENT = True`, `NUM_ROUNDS_FOCUS = 50`, `CRN_PAIRED = True`, and `LOWBIT_NUM_CLIENTS = 2`. The entry runs a **50-round paired SRK/Fourier-Kashin lambda sweep** as a two-client sensitivity experiment, plus the uncompressed Original reference. The fixed 10-client setup remains the baseline configuration in `NUM_CLIENTS` and is not silently replaced.
 
 ```text
 Original
@@ -113,13 +113,15 @@ SRK at 2, 4, 8, and 16 bits
 Kashin at 2, 4, and 8 bits, each with lambda = 1, 1.5, 2, 2.5, and 3
 ```
 
-With `CRN_PAIRED=True`, every variant receives the same per-round client shuffle and quantizer random draws. This improves comparison precision; it does not change the algorithms. The run writes timestamped figures and these tabular summaries:
+With `CRN_PAIRED=True`, every variant receives the same per-round client shuffle and quantizer random draws. This improves comparison precision; it does not change the algorithms. The run writes timestamp-prefixed figures and these tabular summaries:
 
 - `results/kashin_lowbit_round_metrics.csv`
 - `results/kashin_accuracy_saving.csv`
 - `results/kashin_relerr2_summary.csv`
+- `results/fixed_budget_accuracy.csv`
+- `results/fixed_budget_frontier.csv`
 
-The tracked local figures are historical pre-CRN 8-round outputs, not results of the current code. Preserve every new server run under a timestamped directory and record its commit.
+The old cumulative-communication/round-accuracy and target-accuracy figures are no longer generated; fixed-budget accuracy is the primary task-level tradeoff figure. The tracked local figures are historical pre-CRN outputs, not results of the current code. Preserve every new server run under a timestamped directory and record its commit.
 
 ## 6. Communication accounting (authoritative)
 

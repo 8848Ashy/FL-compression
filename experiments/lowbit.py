@@ -68,7 +68,7 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
     fields = list(rows[0]);
     with (results / "kashin_lowbit_round_metrics.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields); w.writeheader(); w.writerows(rows)
-    targets = [85, 87, 88, 89, 90]; target_rows = []
+    targets = [90, 92, 93]; target_rows = []
     for name, kind, bits, lam in specs:
         for target in targets:
             reached = [x for x in rows if x["label"] == name and x["accuracy"] * 100 >= target]
@@ -77,13 +77,6 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
             else: target_rows.append({"method": name, "bits": bits, "target_accuracy": target, "communication_MB": "", "round_reached": "", "status": "NOT_REACHED"})
     with (results / "kashin_accuracy_saving.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(target_rows[0])); w.writeheader(); w.writerows(target_rows)
-    def draw(xkey, filename, xlabel):
-        fig, ax = plt.subplots(figsize=(10, 6))
-        for name, _, _, _ in specs:
-            s = [x for x in rows if x["label"] == name]; ax.plot([x[xkey] for x in s], [x["accuracy"] * 100 for x in s], marker="o", label=name)
-        ax.set_xlabel(xlabel); ax.set_ylabel("Test Accuracy (%)"); ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / filename, dpi=300); plt.close(fig)
-    draw("communication_MB", f"kashin_lowbit_accuracy_communication_{run_stamp}.png", "Cumulative Total Communication (MB)")
-    draw("cumulative_normalized_bits", f"kashin_lowbit_normalized_communication_{run_stamp}.png", "Cumulative Bits per Original Dimension per Client")
     fig, ax = plt.subplots(figsize=(10, 6)); colors = {2: "tab:blue", 4: "tab:orange", 8: "tab:green", 16: "tab:red"}; markers = {2: "x", 4: "s", 8: "^", 16: "D"}
     for bits in (2, 4, 8, 16):
         srk = [x for x in rows if x["method"] == "SRK" and x["bits"] == bits and x["round"] == rounds]
@@ -96,11 +89,47 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
                 ax.annotate(f"λ={x['lambda']:g}", (x["normalized_bits"], x["accuracy"] * 100), xytext=(3, 3), textcoords="offset points", fontsize=7)
     ax.set_xlabel("Per-round Communication (bit/dim/client)"); ax.set_ylabel("Test Accuracy (%)")
     ax.set_title("Accuracy–Communication Trade-off: SRK vs Kashin λ Sweep")
-    ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"kashin_lambda_tradeoff_per_dim_{run_stamp}.png", dpi=300); plt.close(fig)
-    fig, ax = plt.subplots(figsize=(9, 5))
-    for name, _, _, _ in specs:
-        s = [x for x in target_rows if x["method"] == name and x["status"] == "REACHED"]; ax.plot([x["target_accuracy"] for x in s], [float(x["communication_MB"]) for x in s], marker="o", label=name)
-    ax.set_xlabel("Target Accuracy (%)"); ax.set_ylabel("Communication (MB)"); ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"kashin_lowbit_target_accuracy_{run_stamp}.png", dpi=300); plt.close(fig)
+    ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"{run_stamp}_kashin_lambda_tradeoff_per_dim.png", dpi=300); plt.close(fig)
+    # Fixed-budget report: for each cumulative budget, use the last completed
+    # round that does not exceed it. The frontier answers which method gives
+    # the best accuracy under the same actual communication budget.
+    fixed_budgets = [8, 16, 32, 64, 128, 256, 512]
+    budget_rows = []
+    for budget in fixed_budgets:
+        for name, kind, bits, lam in specs:
+            eligible = [x for x in rows if x["label"] == name and x["cumulative_normalized_bits"] <= budget]
+            if not eligible:
+                continue
+            point = max(eligible, key=lambda x: x["round"])
+            budget_rows.append({"budget_normalized_bits": budget, "label": name, "method": kind,
+                                "bits": bits, "lambda": lam, "round": point["round"],
+                                "accuracy": point["accuracy"], "communication_MB": point["communication_MB"]})
+    with (results / "fixed_budget_accuracy.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(budget_rows[0])); w.writeheader(); w.writerows(budget_rows)
+    frontier_rows = []
+    for budget in fixed_budgets:
+        candidates = [x for x in budget_rows if x["budget_normalized_bits"] == budget]
+        for method in ("SRK", "Kashin", "Original"):
+            method_rows = [x for x in candidates if x["method"] == method]
+            if not method_rows:
+                continue
+            best = max(method_rows, key=lambda x: x["accuracy"])
+            frontier_rows.append({**best, "frontier_method": method})
+    with (results / "fixed_budget_frontier.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(frontier_rows[0])); w.writeheader(); w.writerows(frontier_rows)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    frontier_styles = {"SRK": ("tab:blue", "o"), "Kashin": ("tab:orange", "o"), "Original": ("tab:green", "s")}
+    for method, (color, marker) in frontier_styles.items():
+        series = [x for x in frontier_rows if x["frontier_method"] == method]
+        if not series:
+            continue
+        ax.plot([x["budget_normalized_bits"] for x in series], [x["accuracy"] * 100 for x in series],
+                marker=marker, color=color, linewidth=2, label=f"{method} frontier")
+    ax.set_xlabel("Fixed cumulative communication budget (bit/dim/client)")
+    ax.set_ylabel("Accuracy at last round within budget (%)")
+    ax.set_title(f"Fixed-budget accuracy trade-off ({num_clients} clients)")
+    ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout()
+    fig.savefig(plots / f"{run_stamp}_fixed_budget_accuracy.png", dpi=300); plt.close(fig)
     relerr_summary = []
     for name, kind, bits, lam in specs:
         values = [x["relerr2"] for x in rows if x["label"] == name]
@@ -121,8 +150,8 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
     ax.set_yscale("log"); ax.set_xlabel("Per-round Communication (bit/dim/client)")
     ax.set_ylabel("Mean relative squared error  ||delta_hat - delta||^2 / ||delta||^2")
     ax.set_title("Compression Distortion vs Communication: SRK vs Kashin λ Sweep")
-    ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"kashin_relerr2_tradeoff_{run_stamp}.png", dpi=300); plt.close(fig)
+    ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"{run_stamp}_kashin_relerr2_tradeoff.png", dpi=300); plt.close(fig)
     print("mean relative squared compression error per configuration:")
     for x in relerr_summary: print(f"  {x['label']:28s} {x['relerr2']:.6e}")
-    print("[PASS] four low-bit figures + relerr2 summary saved")
+    print("[PASS] fixed-budget, lambda, and relerr2 figures + summaries saved")
     return rows
