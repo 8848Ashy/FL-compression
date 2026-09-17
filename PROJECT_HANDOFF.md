@@ -6,6 +6,43 @@
 
 ## 1. Research objective
 
+### Active direction: matched-input aggregation distortion (2026-09-17)
+
+Run `python -u -m experiments.matched_distortion` from the repository root.
+This is the first validation gate before further FL accuracy claims. It uses
+10 fixed clients (600 examples each), 3 participating clients per round, and
+uncompressed reference trajectories. Identical stored updates at rounds 1, 5,
+and 15 are compressed by every method. Defaults: 5 independent seeds and 12
+rounding draws per snapshot; infer variability across seeds, not across 180
+correlated seed/snapshot/draw combinations.
+
+SRK payload caps are `65536 * b + 64` bits/client for b=1,2,3,4. Fourier-direct,
+historical Kashin, and balanced Kashin use both the same dimensions/bit widths
+and pre-specified alternative widths with `D=floor((cap-64)/bits)`. Include
+all alternatives, not just test-selected winners. Accounting is ideal packed
+uplink payload including min/max float32 endpoints, with shared transform
+seeds; downlink, network framing, and measured wire bytes are not included.
+
+Primary error is squared error of the averaged update divided by mean client
+update energy. Also retain error relative to true mean-update energy, client
+errors, unquantized residuals, coefficient ranges and encoding times.
+
+`kashin_solve_balanced` is a new experimental variant with decreasing clipping
+thresholds, residual correction and input-based range selection. The existing
+`kashin_solve` stays unchanged for historical reproduction; do not silently
+label its old FL results as produced by the new solver. Neither variant has a
+proved Kashin coefficient bound for the custom Fourier frame.
+
+Each run preserves inputs, hashes, raw data, summaries, plot and commit metadata
+under `results/<timestamp>_matched_distortion/`. Read its metadata to determine
+the experiment commit even when HEAD later advances for documentation.
+
+Known limitations of earlier accuracy runs: reducing 10x600 to 3x600 also
+reduced training data; selecting the maximum test accuracy over unequal numbers
+of configurations biases frontiers; legacy lowbit shuffle is reset once per
+client rather than per configuration. Do not use those runs to claim confirmed
+Kashin accuracy superiority or successful full CRN pairing.
+
 Study uplink communication compression for federated learning on MNIST. The intended scientific comparison is:
 
 1. Original FedAvg (uncompressed model updates)

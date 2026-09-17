@@ -14,6 +14,7 @@ data/MNIST/
 *.npy
 *.csv
 *.pt
+/results/*_matched_distortion/
 kashin_ablation/results/gaussian_cache*/
 kashin_ablation/results/Gaussian_cache*/
 

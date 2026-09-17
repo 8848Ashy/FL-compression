@@ -113,3 +113,24 @@ D:\FL\PROJECT_HANDOFF.md 只可作只读背景参考，绝对不要修改它。
 **下一步：**
 
 - 运行 `run_multi_seed.py` 生成 `multi_seed_fixed_budget_summary.csv` 和带误差棒的固定预算图。
+
+---
+
+## 2026-09-18：相同输入与通信预算的聚合失真实验
+
+- 用户授权检查/修改代码并直接运行，先验证聚合失真机制。
+- 实验代码 `f7e28d0`，CPU 两线程，5 seeds × 3 snapshots × 12 rounding draws。
+- 数据固定 10x600，每轮参与 3 客户端；参考路径不压缩，各方法接收同一保存更新。
+- 服务器运行 `python -u -m experiments.matched_distortion` 完成。
+- 原始数据、输入哈希、元信息、汇总和图保存在
+  `results/20260917_235716_matched_distortion/`；已复制回本地同名目录。
+- 主图另存 `plots/20260917_235716_matched_distortion.png`。
+- 同发送长度/同位宽下新版 Kashin 聚合失真比 SRK 低约 20%-22%；旧版约 18%-19%；
+  直接 Fourier 与 SRK 基本相当。5 个种子方向一致。
+- 相同预算下降低 bit、增加冗余的全部预设替代组合均差于 SRK，完整保留负面结果。
+- 新版求解器只是温和改善，旧版重建无明显故障；主 FL 入口仍沿用旧求解器。
+- 已通过新数值检查和原 CRN/relerr 检查；完整说明见
+  `results/Matched_Distortion_Report_20260918.md`。
+- 更正先前记录：3x600 同时减少训练数据，旧低比特循环未完全配对 shuffle，
+  测试集挑最优 frontier 有选择偏差；此前准确率结果不能确证 Kashin 优势。
+- 当前用户已授权维护 PROJECT_HANDOFF.md，覆盖早期“永不修改”的历史规则。
