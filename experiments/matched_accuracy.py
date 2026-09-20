@@ -27,6 +27,9 @@ from compression.kashin_solver import kashin_solve, kashin_solve_balanced
 from compression.quantization import stochastic_k_level_quantize
 from models.mnist_mlp import MNIST_MLP
 from utils.state_dict import flatten_state_dict, unflatten_state_dict
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 
 METHODS = ('SRK', 'Fourier-direct', 'Kashin-legacy', 'Kashin-balanced')
@@ -196,11 +199,11 @@ def main():
             rr=np.arange(1,args.rounds+1); means=np.array(means); spreads=np.array(spreads)
             ax.plot(rr,means,label=method,color=palette[method])
             ax.fill_between(rr,means-spreads,means+spreads,alpha=.10,color=palette[method])
-        ax.set_title(f'{bits}-bit, identical compressed payload per round')
-        ax.set_xlabel('Round (compressed methods: equal cumulative uplink at each round)')
+        ax.set_title(f'{bits}-bit，每轮压缩通信量相同')
+        ax.set_xlabel('轮次（压缩方法在每轮的累计上行通信量相同）')
         ax.grid(alpha=.2)
-    axes[0].set_ylabel('Test accuracy (%)'); axes[1].legend(fontsize=8)
-    fig.suptitle(f'6000 training images, 3 of 10 clients; {len(args.seeds)} seeds, mean +/- SD')
+    axes[0].set_ylabel('测试准确率（%）'); axes[1].legend(fontsize=8)
+    fig.suptitle(f'6000 张训练图片，每轮从 10 个客户端中选 3 个；{len(args.seeds)} 个种子，均值 ± 标准差')
     fig.tight_layout(); fig.savefig(out/'accuracy.png',dpi=200); plt.close(fig)
     metadata['status']='complete'
     (out/'metadata.json').write_text(json.dumps(metadata,indent=2),encoding='utf-8')

@@ -17,6 +17,9 @@ from pathlib import Path
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -160,11 +163,11 @@ def main():
         fig, ax = plt.subplots(figsize=(7, 4))
         for b in BITS:
             s = [r for r in fl if r["bits"] == b]; ax.plot([r["round"] for r in s], [r["test_accuracy"] * 100 for r in s], marker="o", label=f"{b}-bit")
-        ax.set(xlabel="Round", ylabel="Test Accuracy (%)"); ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout(); fig.savefig(out / "srk_accuracy_vs_round.png", dpi=200); plt.close(fig)
+        ax.set(xlabel="轮次", ylabel="测试准确率（%）"); ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout(); fig.savefig(out / "srk_accuracy_vs_round.png", dpi=200); plt.close(fig)
         fig, ax = plt.subplots(figsize=(7, 4))
         for b in BITS:
             s = [r for r in fl if r["bits"] == b]; ax.plot([r["round"] for r in s], [r["quantization_error"] for r in s], marker="o", label=f"{b}-bit")
-        ax.set(xlabel="Round", ylabel="Normalized Quantization Error"); ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout(); fig.savefig(out / "srk_quantization_error_vs_round.png", dpi=200); plt.close(fig)
+        ax.set(xlabel="轮次", ylabel="归一化量化误差"); ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout(); fig.savefig(out / "srk_quantization_error_vs_round.png", dpi=200); plt.close(fig)
     print("\nFinal diagnosis:")
     if not mono: print("SRK quantization implementation may be incorrect; inspect levels, stochastic rounding, scale, clipping, and FWHT normalization.")
     elif max(r["relative_bias"] for r in unbiased) > 0.05: print("QE improves, but unbiasedness bias is non-negligible; inspect stochastic rounding/scale.")

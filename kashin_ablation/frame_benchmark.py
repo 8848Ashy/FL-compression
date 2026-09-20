@@ -11,9 +11,13 @@ ROOT = Path(__file__).resolve().parent
 RESULTS = ROOT / "results"
 PLOTS = RESULTS / "plots"
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT.parent))
 from fourier_frame import FourierFrame
 from kashin_solver import kashin_solve
 from quantization import uniform_quantize
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 LAMBDA_SETTINGS = [1.25, 1.5, 2.0, 2.5, 3.0, 4.0]
 BITS_SETTINGS = [1, 2, 4, 8]
@@ -57,8 +61,8 @@ def make_plots(rows):
     flatten = [by_lambda[lam][0] for lam in LAMBDA_SETTINGS]
     plt.figure(figsize=(8, 5))
     plt.plot([r["lambda"] for r in flatten], [r["peak_ratio"] for r in flatten], "o-")
-    plt.xlabel("Redundancy ratio lambda = D / d"); plt.ylabel("Kashin peak ratio")
-    plt.title("Fourier-Kashin Coefficient Flattening"); plt.grid(True, linestyle="--", alpha=.5)
+    plt.xlabel("冗余比例 lambda = D / d"); plt.ylabel("Kashin 系数峰值比例")
+    plt.title("Fourier-Kashin 系数展平"); plt.grid(True, linestyle="--", alpha=.5)
     plt.tight_layout(); plt.savefig(PLOTS / "lambda_vs_peak_ratio.png", dpi=300); plt.close()
 
     plt.figure(figsize=(8, 5))
@@ -67,14 +71,14 @@ def make_plots(rows):
         subset.sort(key=lambda r: r["total_communication_bits"])
         plt.plot([r["total_communication_bits"] for r in subset],
                  [r["relative_reconstruction_error"] for r in subset], "o-", label=f"{bits}-bit")
-    plt.xlabel("Total coefficient communication bits"); plt.ylabel("Relative reconstruction error")
-    plt.title("Communication–Error Trade-off by Bitwidth"); plt.grid(True, linestyle="--", alpha=.5)
+    plt.xlabel("系数通信总 bit 数"); plt.ylabel("相对重建误差")
+    plt.title("不同 bit 宽度下的通信-误差权衡"); plt.grid(True, linestyle="--", alpha=.5)
     plt.legend(); plt.tight_layout(); plt.savefig(PLOTS / "communication_vs_error.png", dpi=300); plt.close()
 
     plt.figure(figsize=(8, 5))
     plt.plot([r["lambda"] for r in flatten], [r["total_time"] for r in flatten], "o-")
-    plt.xlabel("Redundancy ratio lambda = D / d"); plt.ylabel("Total time (s)")
-    plt.title("Fourier-Kashin Computation Cost"); plt.grid(True, linestyle="--", alpha=.5)
+    plt.xlabel("冗余比例 lambda = D / d"); plt.ylabel("总时间（秒）")
+    plt.title("Fourier-Kashin 计算开销"); plt.grid(True, linestyle="--", alpha=.5)
     plt.tight_layout(); plt.savefig(PLOTS / "lambda_vs_total_time.png", dpi=300); plt.close()
 
 

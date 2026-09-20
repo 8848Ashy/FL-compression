@@ -6,6 +6,9 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 
 def read(path):
@@ -35,8 +38,8 @@ def main():
         labels.append(f'{z["method"]}, {z["bits"]}-bit')
     axes[0].set_yticks(range(len(labels)),labels); axes[0].invert_yaxis()
     axes[0].axvline(0,color='black',ls='--',lw=1)
-    axes[0].set_xlabel('Accuracy difference vs SRK (percentage points)')
-    axes[0].set_title('Round 50: paired seeds and unadjusted 95% t intervals')
+    axes[0].set_xlabel('相对 SRK 的准确率差（百分点）')
+    axes[0].set_title('第 50 轮：配对种子和未校正的 95% t 区间')
     axes[0].grid(axis='x',alpha=.2)
     groups=['SRK','Kashin-legacy','Kashin-balanced']; xpos=np.arange(2)
     palette=['tab:red','tab:blue','tab:orange']
@@ -47,8 +50,8 @@ def main():
             assert len(vals)==5
             means.append(np.mean(vals)); stds.append(np.std(vals,ddof=1))
         axes[1].bar(xpos+(j-1)*.23,means,.23,yerr=stds,capsize=3,label=m,color=c)
-    axes[1].set_xticks(xpos,['1-bit','2-bit']); axes[1].set_ylabel('Uplink to first 92% accuracy (MiB, lower is better)')
-    axes[1].set_title('All 5 seeds reached target; mean +/- SD')
+    axes[1].set_xticks(xpos,['1-bit','2-bit']); axes[1].set_ylabel('首次达到 92% 准确率的上行通信量（MiB，越低越好）')
+    axes[1].set_title('5 个种子都达到目标；均值 ± 标准差')
     axes[1].legend(fontsize=8); axes[1].grid(axis='y',alpha=.2)
     fig.tight_layout(); fig.savefig(out/'accuracy_and_communication.png',dpi=200); plt.close(fig)
     # Explicit fixed cumulative budgets: last affordable round, no config maximum.

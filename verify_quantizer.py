@@ -10,6 +10,9 @@ from pathlib import Path
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 import config
 from data.mnist_federated import build_mnist_federated_data
@@ -84,10 +87,10 @@ def main():
     fig, ax = plt.subplots(figsize=(8, 5.5))
     for name, errs in results.items():
         ax.plot(BITS, errs, marker="o", label=name)
-    ax.plot(BITS, theory, "k--", alpha=.6, label="theory ~ 1/(2^b-1)^2")
-    ax.set_yscale("log"); ax.set_xlabel("bits per coordinate")
-    ax.set_ylabel("relative error  E||Q(g)-g||^2 / ||g||^2")
-    ax.set_title("Quantizer distortion vs bits (real client delta)")
+    ax.plot(BITS, theory, "k--", alpha=.6, label="理论值 ~ 1/(2^b-1)^2")
+    ax.set_yscale("log"); ax.set_xlabel("每个坐标的 bit 数")
+    ax.set_ylabel("相对误差  E||Q(g)-g||^2 / ||g||^2")
+    ax.set_title("量化器失真与 bit 数（真实客户端更新）")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout()
     out = Path(__file__).resolve().parent / "plots" / "quantizer_distortion.png"
     fig.savefig(out, dpi=300); print("[PASS] saved", out)

@@ -12,6 +12,9 @@ from federated.aggregation import federated_round_original_update
 from compression.srk import federated_round_srk_update
 from compression.kashin_frame import FourierKashinFrame
 from compression.kashin_compressor import federated_round_kashin_update
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 
 def _crn_seed_list(seed, round_index, num_clients, salt):
@@ -87,8 +90,8 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
             ax.plot([x["normalized_bits"] for x in k], [x["accuracy"] * 100 for x in k], marker="o", color=colors[bits], label=f"Kashin b={bits}")
             for x in k:
                 ax.annotate(f"λ={x['lambda']:g}", (x["normalized_bits"], x["accuracy"] * 100), xytext=(3, 3), textcoords="offset points", fontsize=7)
-    ax.set_xlabel("Per-round Communication (bit/dim/client)"); ax.set_ylabel("Test Accuracy (%)")
-    ax.set_title("Accuracy–Communication Trade-off: SRK vs Kashin λ Sweep")
+    ax.set_xlabel("每轮通信量（bit/维度/客户端）"); ax.set_ylabel("测试准确率（%）")
+    ax.set_title("准确率-通信量权衡：SRK 与 Kashin λ 扫描")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"{run_stamp}_kashin_lambda_tradeoff_per_dim.png", dpi=300); plt.close(fig)
     # Fixed-budget report: for each cumulative budget, use the last completed
     # round that does not exceed it. The frontier answers which method gives
@@ -124,10 +127,10 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
         if not series:
             continue
         ax.plot([x["budget_normalized_bits"] for x in series], [x["accuracy"] * 100 for x in series],
-                marker=marker, color=color, linewidth=2, label=f"{method} frontier")
-    ax.set_xlabel("Fixed cumulative communication budget (bit/dim/client)")
-    ax.set_ylabel("Accuracy at last round within budget (%)")
-    ax.set_title(f"Fixed-budget accuracy trade-off ({num_clients} clients)")
+                marker=marker, color=color, linewidth=2, label=f"{method} 前沿")
+    ax.set_xlabel("固定累计通信预算（bit/维度/客户端）")
+    ax.set_ylabel("预算内最后一轮的准确率（%）")
+    ax.set_title(f"固定预算下的准确率权衡（{num_clients} 个客户端）")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout()
     fig.savefig(plots / f"{run_stamp}_fixed_budget_accuracy.png", dpi=300); plt.close(fig)
     relerr_summary = []
@@ -147,9 +150,9 @@ def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, ro
             ax.plot([x["normalized_bits"] for x in kline], [x["relerr2"] for x in kline], marker="o", color=colors[bits], label=f"Kashin b={bits}")
             for x in kline:
                 ax.annotate(f"λ={x['lambda']:g}", (x["normalized_bits"], x["relerr2"]), xytext=(3, 3), textcoords="offset points", fontsize=7)
-    ax.set_yscale("log"); ax.set_xlabel("Per-round Communication (bit/dim/client)")
-    ax.set_ylabel("Mean relative squared error  ||delta_hat - delta||^2 / ||delta||^2")
-    ax.set_title("Compression Distortion vs Communication: SRK vs Kashin λ Sweep")
+    ax.set_yscale("log"); ax.set_xlabel("每轮通信量（bit/维度/客户端）")
+    ax.set_ylabel("平均相对平方误差  ||delta_hat - delta||^2 / ||delta||^2")
+    ax.set_title("压缩失真-通信量关系：SRK 与 Kashin λ 扫描")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout(); fig.savefig(plots / f"{run_stamp}_kashin_relerr2_tradeoff.png", dpi=300); plt.close(fig)
     print("mean relative squared compression error per configuration:")
     for x in relerr_summary: print(f"  {x['label']:28s} {x['relerr2']:.6e}")

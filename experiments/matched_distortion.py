@@ -29,6 +29,9 @@ from federated.local_training import local_train_delta
 from federated.aggregation import federated_round_original_update
 from models.mnist_mlp import MNIST_MLP
 from utils.state_dict import flatten_state_dict
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 
 def write_csv(path, rows):
@@ -161,23 +164,23 @@ def plots(summary, out):
         axes[0].plot([x['budget_id']*65536/50890+64/50890 for x in values],
                      [x['nmse_mean'] for x in values],marker=marker,color=color,label=method)
     axes[0].set_yscale('log')
-    axes[0].set_xlabel('Uplink bits / original dimension / client')
-    axes[0].set_ylabel('Aggregated update distortion (NMSE, lower is better)')
-    axes[0].set_title('Same coefficient count and bit width')
+    axes[0].set_xlabel('上行通信量（bit/原始维度/客户端）')
+    axes[0].set_ylabel('聚合更新失真（NMSE，越低越好）')
+    axes[0].set_title('系数个数和 bit 宽度相同')
     axes[0].legend(fontsize=8)
     candidates = sorted([x for x in summary if x['method']=='Kashin-balanced'],key=lambda x:(x['budget_id'],x['bits']))
     positions = np.arange(len(candidates))
     means = np.array([x['ratio_to_srk'] for x in candidates])
     axes[1].errorbar(positions,means,yerr=[means-np.array([x['ratio_ci_low'] for x in candidates]),np.array([x['ratio_ci_high'] for x in candidates])-means],fmt='o',capsize=3,color='tab:orange')
-    axes[1].axhline(1,color='black',ls='--',label='SRK at same budget')
+    axes[1].axhline(1,color='black',ls='--',label='同预算 SRK')
     axes[1].set_yscale('log')
     axes[1].set_xticks(positions,[f'{x["budget_id"]}/{x["bits"]}\n{x["D"]/50890:.2f}' for x in candidates],fontsize=8)
-    axes[1].set_xlabel('SRK bits / Kashin bits; second line: redundancy')
-    axes[1].set_ylabel('Distortion / SRK distortion (<1 is better)')
-    axes[1].set_title('All pre-specified budget-matched combinations')
+    axes[1].set_xlabel('SRK bit / Kashin bit；第二行：冗余比例')
+    axes[1].set_ylabel('Kashin 失真 / 同预算 SRK 失真（<1 更好）')
+    axes[1].set_title('所有预先设定的同预算组合')
     axes[1].legend(fontsize=8)
     for ax in axes: ax.grid(alpha=.25)
-    fig.suptitle('Same real updates, 5 seeds; no accuracy-based configuration selection')
+    fig.suptitle('相同真实更新，5 个种子；不按准确率挑选配置')
     fig.tight_layout()
     fig.savefig(out/'matched_distortion.png',dpi=200)
     plt.close(fig)

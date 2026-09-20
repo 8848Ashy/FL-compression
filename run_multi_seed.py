@@ -11,6 +11,9 @@ from pathlib import Path
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 import config
 from data.mnist_federated import build_mnist_federated_data
@@ -110,8 +113,8 @@ def main():
             for x in k:
                 ax.annotate(f"λ={x['lambda']:g}", (x["normalized_bits"], x["mean_acc"]),
                             xytext=(3, 3), textcoords="offset points", fontsize=7)
-    ax.set_xlabel("Per-round Communication (bit/dim/client)"); ax.set_ylabel("Test Accuracy (%)")
-    ax.set_title(f"Multi-seed (n={len(SEEDS)}) Accuracy-Communication Trade-off: mean +/- std")
+    ax.set_xlabel("每轮通信量（bit/维度/客户端）"); ax.set_ylabel("测试准确率（%）")
+    ax.set_title(f"多种子（n={len(SEEDS)}）准确率-通信量权衡：均值 ± 标准差")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout()
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     fig.savefig(plots / f"{run_stamp}_multi_seed_tradeoff.png", dpi=300); plt.close(fig)
@@ -131,9 +134,9 @@ def main():
             for x in k:
                 ax.annotate(f"λ={x['lambda']:g}", (x["normalized_bits"], x["mean_relerr2"]),
                             xytext=(3, 3), textcoords="offset points", fontsize=7)
-    ax.set_yscale("log"); ax.set_xlabel("Per-round Communication (bit/dim/client)")
-    ax.set_ylabel("Mean relative squared error")
-    ax.set_title(f"Multi-seed (n={len(SEEDS)}) Compression Distortion: mean +/- std")
+    ax.set_yscale("log"); ax.set_xlabel("每轮通信量（bit/维度/客户端）")
+    ax.set_ylabel("平均相对平方误差")
+    ax.set_title(f"多种子（n={len(SEEDS)}）压缩失真：均值 ± 标准差")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(fontsize=8); fig.tight_layout()
     fig.savefig(plots / f"{run_stamp}_multi_seed_relerr2.png", dpi=300); plt.close(fig)
 
@@ -144,10 +147,10 @@ def main():
         if series:
             ax.errorbar([x["budget_normalized_bits"] for x in series], [x["mean_acc"] for x in series],
                         yerr=[x["std_acc"] for x in series], marker="o", capsize=4,
-                        color=color, label=f"{method} frontier")
-    ax.set_xlabel("Fixed cumulative communication budget (bit/dim/client)")
-    ax.set_ylabel("Accuracy at last round within budget (%)")
-    ax.set_title(f"Multi-seed fixed-budget accuracy trade-off (n={len(SEEDS)})")
+                        color=color, label=f"{method} 前沿")
+    ax.set_xlabel("固定累计通信预算（bit/维度/客户端）")
+    ax.set_ylabel("预算内最后一轮的准确率（%）")
+    ax.set_title(f"多种子固定预算下的准确率权衡（n={len(SEEDS)}）")
     ax.grid(True, linestyle="--", alpha=.5); ax.legend(); fig.tight_layout()
     fig.savefig(plots / f"{run_stamp}_multi_seed_fixed_budget.png", dpi=300); plt.close(fig)
 

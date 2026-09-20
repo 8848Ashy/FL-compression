@@ -6,6 +6,9 @@ import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from utils.plot_style import configure_chinese_plotting
+
+configure_chinese_plotting()
 
 root = Path(__file__).resolve().parent
 csv_path = root / "results" / "kashin_lowbit_round_metrics.csv"
@@ -31,8 +34,8 @@ for ax, bits in zip(axes.flat, (2, 4, 8, 16)):
             ax.plot([r["round"] for r in k], [r["acc"] for r in k],
                     color=lam_colors[lam], alpha=.8, label=f"Kashin λ={lam:g}")
     ax.set_title(f"b = {bits}"); ax.grid(True, linestyle="--", alpha=.5)
-    ax.legend(fontsize=8); ax.set_xlabel("Round"); ax.set_ylabel("Test Accuracy (%)")
-fig.suptitle(f"Accuracy vs Round (single seed, {max(r['round'] for r in rows)} rounds)")
+    ax.legend(fontsize=8); ax.set_xlabel("轮次"); ax.set_ylabel("测试准确率（%）")
+fig.suptitle(f"准确率与轮次（单个种子，{max(r['round'] for r in rows)} 轮）")
 fig.tight_layout()
 out = root / "plots" / "rounds_curve.png"
 fig.savefig(out, dpi=300)
