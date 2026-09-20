@@ -1,4 +1,4 @@
-"""Same-input, exact-payload compression benchmark; no test-accuracy selection.
+"""Same-input distortion benchmark for SRK and Kashin lambda values.
 
 Run: python -u -m experiments.matched_distortion
 All methods compress stored updates from one uncompressed reference trajectory.
@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 
 from compression.srk import _fwht_fast
 from compression.kashin_frame import FourierKashinFrame
-from compression.kashin_solver import kashin_solve, kashin_solve_balanced
+from compression.kashin_solver import kashin_solve_balanced
 from compression.quantization import stochastic_k_level_quantize
 from data.mnist_federated import build_mnist_federated_data
 from federated.local_training import local_train_delta
@@ -32,6 +32,9 @@ from utils.state_dict import flatten_state_dict
 from utils.plot_style import configure_chinese_plotting
 
 configure_chinese_plotting()
+
+
+KASHIN_LAMBDAS = (1.0, 65536 / 50890, 1.5)
 
 
 def write_csv(path, rows):
@@ -67,15 +70,11 @@ def reference_updates(seed, out, snapshots):
 def configurations(d):
     D0 = 2 ** int(np.ceil(np.log2(d)))
     result = []
-    for budget_bits in (1, 2, 3, 4):
-        payload = D0 * budget_bits + 64
-        result.append((budget_bits, 'SRK', budget_bits, D0, payload))
-        # Matched dimensions/bit widths isolate transform and solver; alternate
-        # widths test the redundancy-vs-precision tradeoff under the same cap.
-        for bits in range(1, budget_bits + 1):
-            D = (payload - 64) // bits
-            for method in ('Fourier-direct', 'Kashin-legacy', 'Kashin-balanced'):
-                result.append((budget_bits, method, bits, D, payload))
+    for bits in (1, 2, 3, 4):
+        result.append((bits, 'SRK', bits, D0, D0 * bits + 64))
+        for lambda_value in KASHIN_LAMBDAS:
+            D = int(round(lambda_value * d))
+            result.append((bits, 'Kashin', bits, D, D * bits + 64))
     return result
 
 
@@ -96,15 +95,10 @@ def compress_snapshot(seed, r, xs, trials, rows, diagnostics):
                 def decode(a, signs=signs):
                     return (_fwht_fast(a) * signs)[:d]
                 coefficients = [_fwht_fast(torch.nn.functional.pad(x, (0, D-d)) * signs) for x in xs]
-            else:
+            else:  # Kashin-balanced is the sole Kashin solver in this comparison.
                 frame = FourierKashinFrame(d, D, seed=seed + 4000)
                 decode = frame.frame_synthesis
-                if method == 'Fourier-direct':
-                    coefficients = [frame.frame_analysis(x) / frame.A for x in xs]
-                elif method == 'Kashin-legacy':
-                    coefficients = [kashin_solve(frame, x, iterations=10) for x in xs]
-                else:
-                    coefficients = [kashin_solve_balanced(frame, x, iterations=20) for x in xs]
+                coefficients = [kashin_solve_balanced(frame, x, iterations=20) for x in xs]
             elapsed = (time.perf_counter() - start) / len(xs)
             prepared[key] = coefficients, decode
             residuals = torch.stack([decode(a) - x for a, x in zip(coefficients, xs)])
@@ -156,31 +150,26 @@ def summarize(rows, out):
 
 
 def plots(summary, out):
-    fig, axes = plt.subplots(1,2,figsize=(13,5))
-    styles = {'SRK':('black','o'), 'Fourier-direct':('tab:gray','s'),
-              'Kashin-legacy':('tab:blue','^'), 'Kashin-balanced':('tab:orange','D')}
-    for method, (color, marker) in styles.items():
-        values = sorted([x for x in summary if x['method']==method and x['D']==65536],key=lambda x:x['budget_id'])
-        axes[0].plot([x['budget_id']*65536/50890+64/50890 for x in values],
-                     [x['nmse_mean'] for x in values],marker=marker,color=color,label=method)
-    axes[0].set_yscale('log')
-    axes[0].set_xlabel('上行通信量（bit/原始维度/客户端）')
-    axes[0].set_ylabel('聚合更新失真（NMSE，越低越好）')
-    axes[0].set_title('系数个数和 bit 宽度相同')
-    axes[0].legend(fontsize=8)
-    candidates = sorted([x for x in summary if x['method']=='Kashin-balanced'],key=lambda x:(x['budget_id'],x['bits']))
-    positions = np.arange(len(candidates))
-    means = np.array([x['ratio_to_srk'] for x in candidates])
-    axes[1].errorbar(positions,means,yerr=[means-np.array([x['ratio_ci_low'] for x in candidates]),np.array([x['ratio_ci_high'] for x in candidates])-means],fmt='o',capsize=3,color='tab:orange')
-    axes[1].axhline(1,color='black',ls='--',label='同预算 SRK')
-    axes[1].set_yscale('log')
-    axes[1].set_xticks(positions,[f'{x["budget_id"]}/{x["bits"]}\n{x["D"]/50890:.2f}' for x in candidates],fontsize=8)
-    axes[1].set_xlabel('SRK bit / Kashin bit；第二行：冗余比例')
-    axes[1].set_ylabel('Kashin 失真 / 同预算 SRK 失真（<1 更好）')
-    axes[1].set_title('所有预先设定的同预算组合')
-    axes[1].legend(fontsize=8)
-    for ax in axes: ax.grid(alpha=.25)
-    fig.suptitle('相同真实更新，5 个种子；不按准确率挑选配置')
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    srk = sorted([x for x in summary if x['method'] == 'SRK'], key=lambda x: x['bits'])
+    ax.plot([x['D'] * x['bits'] / 50890 + 64 / 50890 for x in srk],
+            [x['nmse_mean'] for x in srk], marker='o', color='black', label='SRK')
+    colors = ('tab:blue', 'tab:orange', 'tab:green')
+    for lambda_value, color in zip(KASHIN_LAMBDAS, colors):
+        D = int(round(lambda_value * 50890))
+        values = sorted([x for x in summary if x['method'] == 'Kashin' and x['D'] == D], key=lambda x: x['bits'])
+        ax.plot([x['D'] * x['bits'] / 50890 + 64 / 50890 for x in values],
+                [x['nmse_mean'] for x in values], marker='D', color=color,
+                label=f'Kashin λ={lambda_value:.2f}')
+    # Original has exactly zero distortion, which cannot be displayed on a log axis.
+    ax.plot([], [], color='tab:gray', linestyle='--', label='Original（无压缩，NMSE=0）')
+    ax.set_yscale('log')
+    ax.set_xlabel('上行通信量（bit/原始维度/客户端）')
+    ax.set_ylabel('聚合更新失真（NMSE，越低越好）')
+    ax.set_title('SRK 与 Kashin 不同 λ 的压缩失真')
+    ax.grid(alpha=.25)
+    ax.legend(fontsize=8)
+    fig.suptitle('相同真实更新，5 个种子；Kashin 使用 balanced 求解')
     fig.tight_layout()
     fig.savefig(out/'matched_distortion.png',dpi=200)
     plt.close(fig)
@@ -203,6 +192,8 @@ def main():
         images_per_client=600,normalizer='mean client squared update norm',metadata_bits=64,
         accounting='ideal packed uplink payload; 2 float32 endpoints; shared transform seeds; excludes downlink and transport',
         sampling='common uncompressed training trajectory; mean over snapshots and quantization draws within each seed',
+        methods=['SRK', 'Kashin-balanced', 'Original (zero distortion reference)'],
+        kashin_lambdas=KASHIN_LAMBDAS,
         solver_variant='shrinking clipping, exact residual correction, retain minimum-range feasible candidate')
     (out/'metadata.json').write_text(json.dumps(meta,indent=2),encoding='utf-8')
     print(f'OUTPUT={out}',flush=True)
@@ -219,7 +210,7 @@ def main():
     meta['status']='complete'
     (out/'metadata.json').write_text(json.dumps(meta,indent=2),encoding='utf-8')
     for x in summary:
-        if x['method']=='Kashin-balanced':
+        if x['method']=='Kashin':
             print(f'budget={x["budget_id"]} Kashin bits={x["bits"]} lambda={x["D"]/50890:.3f}: ratio={x["ratio_to_srk"]:.4f} CI=[{x["ratio_ci_low"]:.4f},{x["ratio_ci_high"]:.4f}]',flush=True)
     print(f'COMPLETE {out}',flush=True)
 
