@@ -6,7 +6,9 @@ import matplotlib as mpl
 def configure_chinese_plotting():
     """Use an available CJK font while retaining technical labels verbatim."""
     mpl.rcParams["font.sans-serif"] = [
-        "Noto Sans CJK SC",
+        "Noto Sans CJK JP",
+        "Droid Sans Fallback",
+        "AR PL UKai CN",
         "Microsoft YaHei",
         "SimHei",
         "WenQuanYi Zen Hei",
