@@ -1,5 +1,22 @@
 # OpenCode 会话日志（Session Log）
 
+## 2026-09-23 自适应端点与 Lloyd-Max
+
+- 实现提交：6826f1a；本地编写、语法检查、commit/push、服务器 fast-forward pull 后运行。
+- 新入口 `experiments.adaptive_accuracy`；实现和局限见 `docs/Adaptive_Quantization_20260923.md`。
+- 本地环境 `D:\Miniconda\envs\fl-mnist\python.exe`：新旧量化 pytest 4 passed。
+- 服务器 `/home/hczhang/flenv/bin/python`，Torch 2.14.0+cu130，实验实际CPU、2线程。
+- 服务器命令：`python -m unittest discover -s tests -p test_adaptive_quantization.py`，3 passed；
+  `python -u -m experiments.adaptive_accuracy --seeds 0 --rounds 2`，13配置全部完成。
+- 输出：`results/20260923_224310_669283_adaptive_accuracy/`，已从服务器复制回 D:\FL。
+- 第一轮同输入、3客户端平均系数MSE：SRK 2bit 优化uniform 4.984513e-6，Lloyd-Max
+  4.926016e-6；Kashin分别3.692667e-6、3.652637e-6。1bit两种优化结果一致。
+- 第二轮准确率：SRK 1bit旧随机85.33%，新两种84.97%；Kashin分别85.66%、84.81%。
+  SRK 2bit优化uniform85.78%，Lloyd-Max85.85%；Kashin分别85.77%、85.75%。
+- 这是单种子2轮通路验证，尚未跑50轮5种子；不能证明训练收益或Kashin优于SRK。
+  新旧对比同时改变了端点和随机/确定性舍入，不能将误差改善完全归因于端点。
+- 解码只用索引及码本；零量化输出注入测试验证SRK/Kashin更新确实依赖量化结果。
+
 **Agent:** OpenCode（模型：k3 / kimi-for-coding）
 **创建日期:** 2026-09-13
 **项目根目录:** `D:\FL`
