@@ -17,6 +17,7 @@ data/MNIST/
 /results/*_matched_distortion/
 /results/*_matched_accuracy/
 /results/*_loss_probe/
+/results/*_adaptive_accuracy/
 kashin_ablation/results/gaussian_cache*/
 kashin_ablation/results/Gaussian_cache*/
 

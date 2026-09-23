@@ -6,6 +6,18 @@
 
 ## 1. Research objective
 
+### Adaptive endpoints and Lloyd-Max (2026-09-23)
+
+New controlled entry: `python -m experiments.adaptive_accuracy`. See
+`docs/Adaptive_Quantization_20260923.md` for implementation, caveats and accounting.
+Per-client/per-round MSE-fitted uniform endpoints and Lloyd-Max codebooks now run
+alongside historical stochastic min/max quantization on SRK and balanced Kashin,
+at 1 and 2 bits. Defaults: 5 seeds, 50 rounds, D=65536, 3 of 10 clients.
+At 1 bit optimized uniform and Lloyd-Max coincide by construction. At 2 bits
+Lloyd-Max sends four float32 values (128 metadata bits, versus uniform's 64).
+Adaptive schemes are biased local MSE optimizers; do not claim global optimality,
+unbiased aggregation, or established training gains. Historical entries unchanged.
+
 ### Current evidence and controlled accuracy protocol (2026-09-18)
 
 Completed `experiments.matched_accuracy`: 5 seeds × 9 configurations × 50 rounds,
