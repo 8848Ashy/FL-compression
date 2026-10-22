@@ -4,7 +4,7 @@ RUN_LOWBIT_EXPERIMENT = True
 FIXED_BITS = 2
 FIXED_K_LEVELS = 4
 NUM_ROUNDS_FOCUS = 50
-TRADEOFF_BITS = [1, 2, 4]
+TRADEOFF_BITS = [1, 2, 3]
 TRADEOFF_ROUNDS = 8
 DEBUG_RANGE = True
 RUN_DISTRIBUTION_TEST = False
@@ -17,7 +17,7 @@ NUM_CLIENTS = 10
 IMAGES_PER_CLIENT = 600
 # Fewer clients make compression noise less diluted by client averaging.
 # NUM_CLIENTS=10 remains the main baseline; this is the tradeoff sensitivity run.
-LOWBIT_NUM_CLIENTS = 3
+LOWBIT_NUM_CLIENTS = 10
 LOWBIT_IMAGES_PER_CLIENT = 600
 CRN_PAIRED = True
 

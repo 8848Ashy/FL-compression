@@ -19,10 +19,11 @@ from compression.kashin_solver import kashin_solve_balanced
 from compression.srk import _fwht_fast
 from compression.quantization import stochastic_k_level_quantize
 from compression.adaptive_quantization import adaptive_quantize
+from compression.quantizer_payload import encode, decode
 
 
 @torch.no_grad()
-def compress_updates(xs, method, bits, quantizer, frame, signs, seed, round_index):
+def compress_updates(xs, method, bits, quantizer, frame, signs, seed, round_index, registry=None):
     recovered, diagnostics = [], []
     for client, x in enumerate(xs):
         started = time.perf_counter()
@@ -30,13 +31,10 @@ def compress_updates(xs, method, bits, quantizer, frame, signs, seed, round_inde
              else kashin_solve_balanced(frame, x, iterations=20))
         transform_seconds = time.perf_counter()-started
         started = time.perf_counter()
-        if quantizer == 'minmax-stochastic':
-            generator = torch.Generator().manual_seed(seed*100000+round_index*100+client+9000000)
-            q, _ = stochastic_k_level_quantize(a, 2**bits, generator)
-            metadata = torch.stack([a.min(), a.max()])
-            wire_bits = a.numel()*bits+64
-        else:
-            q, _, metadata, wire_bits = adaptive_quantize(a, bits, quantizer)
+        generator = torch.Generator().manual_seed(seed*100000+round_index*100+client+9000000)
+        payload = encode(a,bits,quantizer,method,registry,generator)
+        q = decode(payload,registry)
+        metadata, wire_bits = payload.metadata, payload.wire_bits
         quantizer_seconds = time.perf_counter()-started
         recovered.append((_fwht_fast(q)*signs)[:len(x)] if method == 'SRK' else frame.frame_synthesis(q))
         diagnostics.append(dict(client_slot=client,codebook=metadata.tolist(),
@@ -58,7 +56,7 @@ def main():
     args = parser.parse_args()
     torch.set_num_threads(2)
     root = Path(__file__).resolve().parents[1]
-    out = root/'results'/f'{datetime.now():%Y%m%d_%H%M%S_%f}_adaptive_accuracy'
+    out = root/'outputs'/'results'/f'{datetime.now():%Y%m%d_%H%M%S_%f}_adaptive_accuracy'
     out.mkdir(parents=True)
     metadata = dict(vars(args), commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
         status='running', D=65536, participants=3,total_clients=10,train_examples=6000,test_examples=10000,

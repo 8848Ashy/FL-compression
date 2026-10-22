@@ -1,5 +1,7 @@
 # Python cache and local environments
 __pycache__/
+.pytest_cache/
+.codex-*/
 *.py[cod]
 .venv/
 venv/
@@ -10,16 +12,11 @@ data/MNIST/
 *.png
 *.jpg
 *.jpeg
+outputs/
 *.npz
 *.npy
 *.csv
 *.pt
-/results/*_matched_distortion/
-/results/*_matched_accuracy/
-/results/*_loss_probe/
-/results/*_adaptive_accuracy/
-kashin_ablation/results/gaussian_cache*/
-kashin_ablation/results/Gaussian_cache*/
 
 # Runtime logs and temporary outputs
 *.log

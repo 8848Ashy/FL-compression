@@ -89,7 +89,7 @@ def main():
     assert total_communication_bits(101780 + 64, 10, 8) == (101780 + 64) * 10 * 8
     print("[PASS] communication utilities")
 
-    sample = ROOT / "kashin_ablation" / "results" / "sample_delta.pt"
+    sample = ROOT / "outputs" / "kashin_ablation" / "sample_delta.pt"
     if sample.exists():
         real = torch.load(sample, map_location="cpu", weights_only=True).float().flatten()
         if real.numel() == d:

@@ -185,7 +185,7 @@ def main():
     torch.set_num_threads(2)
     root = Path(__file__).resolve().parents[1]
     stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    out = root/'results'/f'{stamp}_{args.tag}'
+    out = root/'outputs'/'results'/f'{stamp}_{args.tag}'
     out.mkdir(parents=True,exist_ok=False)
     meta = dict(vars(args), commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
         device='cpu',threads=2,torch=torch.__version__,total_clients=10,participating_clients=3,

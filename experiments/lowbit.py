@@ -23,8 +23,8 @@ def _crn_seed_list(seed, round_index, num_clients, salt):
 
 def run_kashin_lowbit_experiment(client_loaders, test_loader, num_clients=10, rounds=8, seed=2026,
                                  save_outputs=True, crn_paired=True):
-    root = Path(__file__).resolve().parents[1]; results = root / "results"; plots = root / "plots"
-    results.mkdir(exist_ok=True); plots.mkdir(exist_ok=True)
+    root = Path(__file__).resolve().parents[1]; results = root / "outputs" / "results"; plots = root / "outputs" / "plots"
+    results.mkdir(parents=True, exist_ok=True); plots.mkdir(parents=True, exist_ok=True)
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu"); print(f"low-bit experiment device: {device}")
     base = MNIST_MLP().to(device); d = sum(p.numel() for p in base.parameters()); srk_D = 2 ** int(np.ceil(np.log2(d)))

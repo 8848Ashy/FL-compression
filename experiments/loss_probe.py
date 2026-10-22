@@ -22,7 +22,7 @@ from utils.state_dict import flatten_state_dict, unflatten_state_dict
 
 def main():
     torch.set_num_threads(2)
-    out=Path('results')/f'{datetime.now():%Y%m%d_%H%M%S}_loss_probe'; out.mkdir()
+    out=Path('outputs')/'results'/f'{datetime.now():%Y%m%d_%H%M%S}_loss_probe'; out.mkdir(parents=True)
     meta=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
         seeds=list(range(5)),snapshots=[1,15,50],trials=8,status='running',
         purpose='exploratory same-checkpoint immediate loss effect; no tuning; all configurations retained')

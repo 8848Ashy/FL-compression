@@ -100,7 +100,7 @@ def main():
     p.add_argument('--rounds',type=int,default=50)
     args=p.parse_args(); torch.set_num_threads(2)
     root=Path(__file__).resolve().parents[1]
-    out=root/'results'/f'{datetime.now():%Y%m%d_%H%M%S}_matched_accuracy'
+    out=root/'outputs'/'results'/f'{datetime.now():%Y%m%d_%H%M%S}_matched_accuracy'
     out.mkdir(parents=True,exist_ok=False)
     specs=[('Original','Original',32)]+[(f'{m}-{b}bit',m,b) for b in (1,2) for m in METHODS]
     metadata=dict(vars(args),commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
