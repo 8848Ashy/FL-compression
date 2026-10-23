@@ -57,7 +57,7 @@ def lloyd_max_quantize(values, k_levels, iterations=20):
 
 
 def quantize_doscale(x, bits=1, scale_type="l1_mean", stochastic=True, generator=None):
-    """Quantize with a per-vector dynamic scale (the scale is side metadata)."""
+    """Quantize with a per-vector dynamic scale, returning decoded values and metadata."""
     if x.ndim == 0 or not x.numel() or not x.is_floating_point() or not torch.isfinite(x).all():
         raise ValueError("x must be a nonempty finite floating tensor")
     if bits < 1:
@@ -71,12 +71,15 @@ def quantize_doscale(x, bits=1, scale_type="l1_mean", stochastic=True, generator
     else:
         raise ValueError("scale_type must be l1_mean, l2_norm, or max")
     if scale.item() == 0:
-        return torch.zeros_like(x)
+        return {"values": torch.zeros_like(x), "bpc": float(bits), "scale": 0.0}
     scale = scale.clamp_min(torch.finfo(x.dtype).tiny)
     if bits == 1:
-        return scale * torch.where(x >= 0, 1.0, -1.0)
-    # The selected statistic is the dynamic clipping radius for multibit coding.
-    return _quantize_symmetric(x.clamp(-scale, scale), scale, bits, stochastic, generator)
+        decoded, effective_scale = scale * torch.where(x >= 0, 1.0, -1.0), scale
+    else:
+        # Multibit coding covers the full dynamic range to avoid L1/RMS clipping bias.
+        effective_scale = x.abs().max().clamp_min(torch.finfo(x.dtype).tiny)
+        decoded = _quantize_symmetric(x, effective_scale, bits, stochastic, generator)
+    return {"values": decoded, "bpc": float(bits), "scale": float(effective_scale.item())}
 
 
 def quantize_static_noscale(x, bits=1, clip_val=0.05, stochastic=True, generator=None):
@@ -88,8 +91,10 @@ def quantize_static_noscale(x, bits=1, clip_val=0.05, stochastic=True, generator
     bound = torch.as_tensor(clip_val, dtype=x.dtype, device=x.device)
     clipped = x.clamp(-bound, bound)
     if bits == 1:
-        return torch.where(clipped >= 0, bound, -bound)
-    return _quantize_symmetric(clipped, bound, bits, stochastic, generator)
+        decoded = torch.where(clipped >= 0, bound, -bound)
+    else:
+        decoded = _quantize_symmetric(clipped, bound, bits, stochastic, generator)
+    return {"values": decoded, "bpc": float(bits), "scale": float(clip_val)}
 
 
 def _quantize_symmetric(x, bound, bits, stochastic, generator):

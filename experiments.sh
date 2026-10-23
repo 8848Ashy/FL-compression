@@ -22,7 +22,8 @@ stage1_doscale() {
 stage1_noscale() {
   for transform in raw hadamard fourier_kashin; do
     python run_experiment.py "${COMMON[@]}" --transform "$transform" \
-      --scale_mode noscale --clip_val 0.02 --bits 1 --lam 1.3 \
+      --scale_mode noscale --noscale_bound_mode dimension_scaled \
+      --clip_val 0.25 --bits 1 --lam 1.3 \
       --exp_name "stage1_noscale_${transform}"
   done
 }
@@ -31,13 +32,30 @@ stage2_bpd_law() {
   for bits in 1 2 3; do
     for transform in raw hadamard; do
       python run_experiment.py "${COMMON[@]}" --transform "$transform" \
-        --scale_mode noscale --clip_val 0.02 --bits "$bits" --lam 1.3 \
-        --exp_name "stage2_${transform}_b${bits}"
+        --scale_mode noscale --noscale_bound_mode dimension_scaled \
+        --clip_val 0.25 --bits "$bits" --lam 1.3 \
+        --exp_name "stage2_noscale_${transform}_b${bits}"
     done
     for lam in 1.15 1.3 1.6 2.0; do
       python run_experiment.py "${COMMON[@]}" --transform fourier_kashin \
-        --scale_mode noscale --clip_val 0.02 --bits "$bits" --lam "$lam" \
-        --exp_name "stage2_fourier_kashin_b${bits}_lam${lam}"
+        --scale_mode noscale --noscale_bound_mode dimension_scaled \
+        --clip_val 0.25 --bits "$bits" --lam "$lam" \
+        --exp_name "stage2_noscale_fourier_kashin_b${bits}_lam${lam}"
+    done
+  done
+}
+
+stage2_bpd_law_doscale() {
+  for bits in 1 2 3; do
+    for transform in raw hadamard; do
+      python run_experiment.py "${COMMON[@]}" --transform "$transform" \
+        --scale_mode doscale --bits "$bits" --lam 1.3 \
+        --exp_name "stage2_doscale_${transform}_b${bits}"
+    done
+    for lam in 1.15 1.3 1.6 2.0; do
+      python run_experiment.py "${COMMON[@]}" --transform fourier_kashin \
+        --scale_mode doscale --bits "$bits" --lam "$lam" \
+        --exp_name "stage2_doscale_fourier_kashin_b${bits}_lam${lam}"
     done
   done
 }
@@ -46,5 +64,6 @@ case "${1:-}" in
   stage1_doscale) stage1_doscale ;;
   stage1_noscale) stage1_noscale ;;
   stage2_bpd_law) stage2_bpd_law ;;
-  *) echo "Usage: $0 {stage1_doscale|stage1_noscale|stage2_bpd_law}" >&2; exit 2 ;;
+  stage2_bpd_law_doscale) stage2_bpd_law_doscale ;;
+  *) echo "Usage: $0 {stage1_doscale|stage1_noscale|stage2_bpd_law|stage2_bpd_law_doscale}" >&2; exit 2 ;;
 esac

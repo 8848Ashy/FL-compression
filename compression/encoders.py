@@ -24,7 +24,8 @@ class VectorEncoder:
     scale_mode: str = "doscale"
     bits: int = 1
     lam: float = 1.3
-    clip_val: float = 0.02
+    clip_val: float = 0.25
+    noscale_bound_mode: str = "dimension_scaled"
     scale_type: str = "l1_mean"
     kashin_iters: int = 5
     kashin_eta: float = 0.9
@@ -35,6 +36,8 @@ class VectorEncoder:
             raise ValueError(f"transform must be one of {ENCODERS}")
         if self.scale_mode not in ("doscale", "noscale"):
             raise ValueError("scale_mode must be doscale or noscale")
+        if self.noscale_bound_mode not in ("dimension_scaled", "raw_fixed"):
+            raise ValueError("noscale_bound_mode must be dimension_scaled or raw_fixed")
         if self.bits not in (1, 2, 3, 4, 8):
             raise ValueError("bits must be one of 1, 2, 3, 4, 8")
         if self.lam < 1 or not math.isfinite(self.lam):
@@ -70,7 +73,7 @@ class VectorEncoder:
                 inverse = lambda value: hadamard_inverse(value, d, signs)
             elif self.transform in ("fourier_kashin", "fourier_kashin_balanced"):
                 D = max(d, int(round(self.lam * d)))
-                frame = FourierKashinFrame(d, D, seed=int(seed))
+                frame = FourierKashinFrame(d, D, seed=int(seed), device=device)
                 if self.transform == "fourier_kashin_balanced":
                     coefficients = kashin_solve_balanced(
                         frame, flat_delta, iterations=self.kashin_iters, decay=self.kashin_eta
@@ -82,24 +85,48 @@ class VectorEncoder:
                 D, coefficients = d, flat_delta
 
             if self.scale_mode == "doscale":
-                quantized = quantize_doscale(
+                quantization = quantize_doscale(
                     coefficients, bits=self.bits, scale_type=self.scale_type,
                     stochastic=self.stochastic, generator=qgen,
                 )
+                quantized = quantization["values"]
+                bpd = self.bits * (D / d) + 32.0 / d
             else:
-                quantized = quantize_static_noscale(
-                    coefficients, bits=self.bits, clip_val=self.clip_val,
+                effective_clip = self._effective_clip(d, D)
+                quantization = quantize_static_noscale(
+                    coefficients, bits=self.bits, clip_val=effective_clip,
                     stochastic=self.stochastic, generator=qgen,
                 )
+                quantized = quantization["values"]
             reconstructed = inverse(quantized)
             actual_lam = D / d
-            bpd = self.bits * actual_lam
+            if self.scale_mode == "noscale":
+                bpd = self.bits * actual_lam
 
         error = reconstructed - flat_delta
         mse = error.square().mean().item()
         nmse = (error.square().sum() / flat_delta.square().sum().clamp_min(1e-12)).item()
-        return reconstructed, {"bpd": float(bpd), "actual_lam": float(actual_lam),
-                               "mse": float(mse), "nmse": float(nmse)}
+        stats = {"bpd": float(bpd), "actual_lam": float(actual_lam),
+                 "mse": float(mse), "nmse": float(nmse)}
+        if self.transform != "uncompressed":
+            stats.update({"bpc": quantization["bpc"], "scale": quantization["scale"]})
+            if self.scale_mode == "noscale":
+                stats["effective_clip"] = float(effective_clip)
+        return reconstructed, stats
+
+    def _effective_clip(self, d: int, D: int) -> float:
+        if self.transform == "raw":
+            if self.noscale_bound_mode == "raw_fixed":
+                return float(self.clip_val)
+            return float(self.clip_val * 4.0 / math.sqrt(d))
+        if self.transform == "hadamard":
+            return float(self.clip_val * math.sqrt(2.0 * math.log(max(D, 2))) / math.sqrt(D))
+        if self.transform in ("fourier_kashin", "fourier_kashin_balanced"):
+            kashin_c = 2.0
+            if self.transform == "fourier_kashin_balanced":
+                kashin_c /= math.sqrt(D / d)
+            return float(self.clip_val * kashin_c / math.sqrt(D))
+        return float(self.clip_val)
 
 
 ENCODER_REGISTRY = {name: VectorEncoder for name in ENCODERS}

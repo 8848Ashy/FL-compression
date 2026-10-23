@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
 
 import matplotlib
@@ -55,28 +56,99 @@ def plot(root: Path, output_dir: Path):
     fig.savefig(output_dir / "accuracy_vs_rounds.png", dpi=220)
     plt.close(fig)
 
-    grouped = {}
+    points = []
     for params, rows in runs:
-        transform = params.get("transform", "unknown")
         tail = rows[-10:]
-        x = sum(r["bpd"] for r in tail) / len(tail)
-        y = sum(r["test_acc"] for r in tail) / len(tail)
-        grouped.setdefault(transform, []).append((x, y, params.get("bits", 1), params.get("lam", 1.0)))
-    fig, ax = plt.subplots(figsize=(9, 6))
-    for transform, points in sorted(grouped.items()):
-        points.sort()
-        ax.plot([p[0] for p in points], [p[1] for p in points], marker="o", label=transform)
-        for x, y, bits, lam in points:
-            ax.annotate(f"{bits}b, λ={lam:g}", (x, y), xytext=(4, 4),
-                        textcoords="offset points", fontsize=7)
-    ax.set(xlabel="Bits per dimension", ylabel="Final test accuracy (last 10 round mean)",
-           title="Accuracy vs communication budget")
-    ax.grid(True, alpha=0.3)
-    ax.legend()
+        points.append({
+            "transform": params.get("transform", "unknown"),
+            "scale_mode": params.get("scale_mode", "unknown"),
+            "bits": int(params.get("bits", 1)),
+            "lam": float(params.get("lam", 1.0)),
+            "bpd": sum(r["bpd"] for r in tail) / len(tail),
+            "accuracy": sum(r["test_acc"] for r in tail) / len(tail),
+            "nmse": sum(r["mean_nmse"] for r in tail) / len(tail),
+        })
+
+    colors = {"raw": "#d62728", "hadamard": "#1f77b4",
+              "fourier_kashin": "#2ca02c", "fourier_kashin_balanced": "#9467bd"}
+    scale_modes = sorted({point["scale_mode"] for point in points})
+
+    def draw_metric(ax, metric):
+        for scale_index, scale_mode in enumerate(scale_modes):
+            subset = [p for p in points if p["scale_mode"] == scale_mode]
+            suffix = f" ({scale_mode})" if len(scale_modes) > 1 else ""
+            for transform in ("raw", "hadamard"):
+                series = sorted((p for p in subset if p["transform"] == transform),
+                                key=lambda p: p["bits"])
+                if series:
+                    ax.plot([p["bpd"] for p in series], [p[metric] for p in series],
+                            marker="o", color=colors[transform],
+                            linestyle="-" if transform == "raw" else "--",
+                            label=f"{transform}{suffix}")
+
+            for transform in ("fourier_kashin", "fourier_kashin_balanced"):
+                kashin = [p for p in subset if p["transform"] == transform]
+                if not kashin:
+                    continue
+                fixed_bit = sorted((p for p in kashin if p["bits"] == 1), key=lambda p: p["lam"])
+                fixed_lam = sorted((p for p in kashin if math.isclose(p["lam"], 1.3, abs_tol=1e-6)),
+                                   key=lambda p: p["bits"])
+                color = colors[transform]
+                if fixed_bit:
+                    ax.plot([p["bpd"] for p in fixed_bit], [p[metric] for p in fixed_bit],
+                            marker="^", color=color, linestyle="-",
+                            label=f"{transform}, 1 bit, varying λ{suffix}")
+                if fixed_lam:
+                    ax.plot([p["bpd"] for p in fixed_lam], [p[metric] for p in fixed_lam],
+                            marker="s", color=color, linestyle=":",
+                            label=f"{transform}, λ=1.3, varying bits{suffix}")
+                # Pareto frontier: minimize BPD and maximize the selected metric.
+                unique = {}
+                for p in kashin:
+                    key = round(p["bpd"], 9)
+                    if key not in unique:
+                        unique[key] = p
+                    elif ((metric == "accuracy" and p[metric] > unique[key][metric])
+                          or (metric == "nmse" and p[metric] < unique[key][metric])):
+                        unique[key] = p
+                frontier = []
+                best_score = -math.inf
+                for p in sorted(unique.values(), key=lambda row: row["bpd"]):
+                    score = p[metric] if metric == "accuracy" else -p[metric]
+                    if score > best_score:
+                        frontier.append(p)
+                        best_score = score
+                if len(frontier) > 1:
+                    ax.plot([p["bpd"] for p in frontier], [p[metric] for p in frontier],
+                            color=color, linewidth=2.4, alpha=0.75,
+                            label=f"{transform} Pareto frontier{suffix}")
+
+        baseline = [p[metric] for p in points if p["transform"] == "uncompressed"]
+        if baseline and metric == "accuracy":
+            ax.axhline(sum(baseline) / len(baseline), color="black", linestyle="--",
+                       label="Uncompressed FedAvg (32 BPD)")
+        ax.set_xlabel("Bits per dimension (BPD)")
+        ax.set_ylabel("Last-10-round mean accuracy" if metric == "accuracy"
+                      else "Last-10-round mean client NMSE")
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8)
+
+    fig, ax = plt.subplots(figsize=(10, 6.5))
+    draw_metric(ax, "accuracy")
+    ax.set_title("Accuracy vs communication budget")
     fig.tight_layout()
     fig.savefig(output_dir / "accuracy_vs_bpd.png", dpi=220)
     plt.close(fig)
-    return output_dir / "accuracy_vs_rounds.png", output_dir / "accuracy_vs_bpd.png"
+
+    fig, ax = plt.subplots(figsize=(10, 6.5))
+    draw_metric(ax, "nmse")
+    ax.set_yscale("log")
+    ax.set_title("Round mean NMSE vs communication budget")
+    fig.tight_layout()
+    fig.savefig(output_dir / "nmse_vs_bpd.png", dpi=220)
+    plt.close(fig)
+    return (output_dir / "accuracy_vs_rounds.png", output_dir / "accuracy_vs_bpd.png",
+            output_dir / "nmse_vs_bpd.png")
 
 
 def main():

@@ -46,14 +46,20 @@ python run_experiment.py --transform fourier_kashin_balanced --bits 2 `
 
 # Fixed clipping range; no per-vector scale metadata
 python run_experiment.py --transform hadamard --scale_mode noscale `
-  --bits 1 --clip_val 0.02
+  --bits 1 --clip_val 0.25 --noscale_bound_mode dimension_scaled
 ```
 
 `doscale` estimates a per-vector scale from the encoded coefficients. Select it
-with `--scale_type l1_mean`, `l2_norm`, or `max`. `noscale` uses the fixed
-`--clip_val` range and sends no scale metadata. For `raw`, the transform is the
-identity; `hadamard` pads to the next power of two; Fourier-Kashin uses
-`D=max(d, round(lam*d))`. `bpd` is `bits * actual_lam`; uncompressed is 32 BPD.
+with `--scale_type l1_mean`, `l2_norm`, or `max` for 1-bit reconstruction
+levels. Multibit `doscale` uses the full coefficient range `[-max(abs(x)),
+max(abs(x))]` to avoid clipping bias. `noscale` sends no scale metadata and
+defaults to `--noscale_bound_mode dimension_scaled`, where `--clip_val` is the
+reference update L2 norm and the per-coordinate clipping range is adjusted for
+the selected transform. `raw_fixed` uses `clip_val` directly for raw coordinates.
+For `raw`, the transform is the identity; `hadamard` pads to the next power of
+two; Fourier-Kashin uses `D=max(d, round(lam*d))`. BPD is `bits * actual_lam`
+for noscale, `bits * actual_lam + 32/d` for doscale scale metadata, and 32 for
+uncompressed.
 The CLI accepts `drive` and `drive_plus` names to reserve the intended method
 names, but currently raises a clear `NotImplementedError` for them.
 
@@ -80,6 +86,7 @@ On Bash, run one declarative grid stage:
 bash experiments.sh stage1_doscale
 bash experiments.sh stage1_noscale
 bash experiments.sh stage2_bpd_law
+bash experiments.sh stage2_bpd_law_doscale
 ```
 
 Set `TOTAL_ROUNDS`, `CLIENTS`, `PER_ROUND`, and `OUT` to adjust the grid. The
@@ -93,8 +100,9 @@ python plot_results.py --output_dir results/drive_style
 ```
 
 This writes `accuracy_vs_rounds.png` (accuracy and NMSE against rounds and
-cumulative BPD) and `accuracy_vs_bpd.png` (last-ten-round mean accuracy against
-effective BPD).
+cumulative BPD), `accuracy_vs_bpd.png` (last-ten-round mean accuracy against
+effective BPD, including a Kashin Pareto frontier and the FedAvg baseline), and
+`nmse_vs_bpd.png` (last-ten-round mean client NMSE against BPD).
 
 ## Project layout
 

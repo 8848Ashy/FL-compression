@@ -38,7 +38,10 @@ def parse_args(argv=None):
     parser.add_argument("--scale_type", choices=("l1_mean", "l2_norm", "max"), default="l1_mean")
     parser.add_argument("--bits", type=int, choices=(1, 2, 3, 4, 8), default=1)
     parser.add_argument("--lam", type=float, default=1.3)
-    parser.add_argument("--clip_val", type=float, default=0.02)
+    parser.add_argument("--clip_val", type=float, default=0.25,
+                        help="reference L2 norm for noscale dimension_scaled bounds")
+    parser.add_argument("--noscale_bound_mode", choices=("dimension_scaled", "raw_fixed"),
+                        default="dimension_scaled")
     parser.add_argument("--kashin_iters", type=int, default=5)
     parser.add_argument("--kashin_eta", type=float, default=0.9)
     parser.add_argument("--frame_seed_mode", choices=("independent", "shared"), default="independent")
@@ -76,7 +79,8 @@ def main(argv=None):
     model.to(device)
     encoder = VectorEncoder(
         transform=args.transform, scale_mode=args.scale_mode, bits=args.bits,
-        lam=args.lam, clip_val=args.clip_val, scale_type=args.scale_type,
+        lam=args.lam, clip_val=args.clip_val, noscale_bound_mode=args.noscale_bound_mode,
+        scale_type=args.scale_type,
         kashin_iters=args.kashin_iters, kashin_eta=args.kashin_eta,
     )
     exp_name = args.exp_name or (
