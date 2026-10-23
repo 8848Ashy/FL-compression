@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import torch
 from compression.quantization import stochastic_k_level_quantize
-from compression.adaptive_quantization import adaptive_quantize
+from archive.compression.adaptive_quantization import adaptive_quantize
 
 METHODS = ('minmax-stochastic','minmax-nearest','optimized-uniform','lloyd-max',
            'fixed-uniform','fixed-lloyd-max')

@@ -11,9 +11,9 @@ sys.path.insert(0, str(ROOT))
 
 from models.mnist_mlp import MNIST_MLP
 from compression.quantization import stochastic_k_level_quantize
-from compression.srk import federated_round_srk_update
+from archive.compression.srk_legacy import federated_round_srk_update
 from compression.kashin_frame import FourierKashinFrame
-from compression.kashin_compressor import federated_round_kashin_update
+from archive.compression.kashin_compressor import federated_round_kashin_update
 
 
 def _random_deltas(model, n=3, scale=0.01):

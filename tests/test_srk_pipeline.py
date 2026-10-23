@@ -1,6 +1,6 @@
 import torch
 from models.mnist_mlp import MNIST_MLP
-from compression.srk import federated_round_srk_update
+from archive.compression.srk_legacy import federated_round_srk_update
 
 
 def test_srk_update_runs():

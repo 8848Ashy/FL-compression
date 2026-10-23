@@ -8,9 +8,9 @@ import numpy as np
 import torch
 from scipy.stats import t
 
-from experiments import quantizer_study as old
-from experiments.full_quantizer_training import SPECS, STAGES, FINGERPRINT, key, wire_bits, tensor_sha
-from compression.quantizer_payload import METHODS, canonical, encode, decode, CodebookRegistry
+from archive.experiments import quantizer_study as old
+from archive.experiments.full_quantizer_training import SPECS, STAGES, FINGERPRINT, key, wire_bits, tensor_sha
+from archive.compression.quantizer_payload import METHODS, canonical, encode, decode, CodebookRegistry
 
 A, B, C, D, E, F = METHODS
 PRIMARY = [(rep, bits, new, ref) for rep in ('SRK', 'Kashin')

@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from experiments import quantizer_study as old
-from compression.quantizer_payload import METHODS, canonical, encode, decode, rms32, CodebookRegistry
+from archive.experiments import quantizer_study as old
+from archive.compression.quantizer_payload import METHODS, canonical, encode, decode, rms32, CodebookRegistry
 from models.mnist_mlp import MNIST_MLP
 from utils.state_dict import flatten_state_dict
 

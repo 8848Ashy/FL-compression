@@ -1,7 +1,9 @@
 # 联邦学习通信压缩：研究综述与答辩准备
 
+> 历史研究记录：文中的旧实验入口已迁入 `archive/experiments/`；新实验从根目录 `run_experiment.py` 启动。
+
 这份说明解释项目做了什么、为什么改实验，以及结论的边界。
-配套数据与最终准确率分析在 `results/Matched_Accuracy_Report_20260918.md`。
+配套数据与最终准确率分析在 `docs/reports/Matched_Accuracy_Report_20260918.md`。
 
 ## 1. 要解决的实际问题
 
@@ -56,7 +58,7 @@ Kashin 在同一框架下进一步调整系数表示，让较大的系数不那�
 
 ## 5. 第一阶段：把压缩器单独拿出来比较
 
-入口：`python -m experiments.matched_distortion`。
+历史入口（已归档）：`archive/experiments/matched_distortion.py`。
 
 从不压缩的参考训练第 1、5、15 轮保存真实客户端更新。所有压缩器接收同一份输入。
 这样“方法 A 的输入比较容易压缩”不可能解释结果。
@@ -98,7 +100,7 @@ Kashin 在同一框架下进一步调整系数表示，让较大的系数不那�
 
 ## 7. 第二阶段：完整训练验证
 
-入口：`python -m experiments.matched_accuracy`。
+历史入口（已归档）：`archive/experiments/matched_accuracy.py`。
 
 - 数据：同一 MNIST 前 6000 张训练图、完整 10000 张测试图；10 个客户端，每个 600 张。
 - 每轮参与 3 个客户端，所有方法使用相同参与者。

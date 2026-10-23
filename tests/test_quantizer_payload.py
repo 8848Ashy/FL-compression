@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from compression.quantizer_payload import (METHODS,Payload,CodebookRegistry,canonical,
+from archive.compression.quantizer_payload import (METHODS,Payload,CodebookRegistry,canonical,
                                           encode,decode,rms32,uniform_centers)
 from compression.quantization import stochastic_k_level_quantize
 
@@ -67,7 +67,7 @@ def test_small_range_regression_and_dtype():
 
 def test_diagnostics_serializable_and_original_fitting_results_preserved():
     import subprocess
-    from compression.adaptive_quantization import adaptive_quantize
+    from archive.compression.adaptive_quantization import adaptive_quantize
     namespace={}
     exec(subprocess.check_output(['git','show','351411e:compression/adaptive_quantization.py'],text=True),namespace)
     torch.manual_seed(19)
@@ -122,7 +122,7 @@ def test_registry_save_load_hash_and_frozen_online_no_fitting():
         loaded=CodebookRegistry.load(path)
         assert loaded.fingerprint()==before
         for method in ('fixed-uniform','fixed-lloyd-max'):
-            with patch('compression.quantizer_payload.adaptive_quantize',side_effect=AssertionError('online fitting')):
+            with patch('archive.compression.quantizer_payload.adaptive_quantize',side_effect=AssertionError('online fitting')):
                 p=encode(torch.randn(20),2,method,'SRK',loaded)
                 torch.testing.assert_close(decode(p,loaded),decode(p,reg))
         assert loaded.fingerprint()==before
@@ -160,12 +160,12 @@ def test_invalid_decode():
 @pytest.mark.parametrize('method',METHODS)
 @pytest.mark.parametrize('representation',['SRK','Kashin'])
 def test_zero_decoded_update_controls_aggregation_and_server_model(method,representation):
-    from experiments.quantizer_study import aggregate_payload_updates,apply_update
+    from archive.experiments.quantizer_study import aggregate_payload_updates,apply_update
     from compression.kashin_frame import FourierKashinFrame
     from models.mnist_mlp import MNIST_MLP
     xs=torch.randn(3,8)
     frame=FourierKashinFrame(8,16);signs=torch.ones(16)
-    with patch('experiments.quantizer_study.decode',side_effect=lambda p,r:torch.zeros_like(p.indices,dtype=torch.float32)):
+    with patch('archive.experiments.quantizer_study.decode',side_effect=lambda p,r:torch.zeros_like(p.indices,dtype=torch.float32)):
         update,_,_=aggregate_payload_updates(xs,representation,1,method,frame,signs,registry(),0,1)
     torch.testing.assert_close(update,torch.zeros(8),rtol=0,atol=0)
     model=MNIST_MLP();before={k:v.clone() for k,v in model.state_dict().items()}
@@ -175,7 +175,7 @@ def test_zero_decoded_update_controls_aggregation_and_server_model(method,repres
 
 
 def test_split_and_input_hash_checks():
-    from experiments.quantizer_study import ensure_independent,load_inputs
+    from archive.experiments.quantizer_study import ensure_independent,load_inputs
     reg=CodebookRegistry({},dict(records=[dict(seed=11)]))
     with pytest.raises(ValueError):
         ensure_independent(reg,[dict(seed=11)])

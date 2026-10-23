@@ -1,9 +1,9 @@
 import copy
 import pytest
 import torch
-from experiments import full_quantizer_training as ft
-from experiments import quantizer_study as old
-from compression.quantizer_payload import CodebookRegistry
+from archive.experiments import full_quantizer_training as ft
+from archive.experiments import quantizer_study as old
+from archive.compression.quantizer_payload import CodebookRegistry
 
 
 @pytest.mark.parametrize('rep,bits,method',[(rep,b,m) for rep in ('SRK','Kashin') for b,m in

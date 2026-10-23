@@ -4,9 +4,12 @@ import torch
 
 class FourierKashinFrame:
     """Random-phase Fourier tight frame. Always FFT; never FWHT."""
-    def __init__(self, d, D, seed=2026):
+    def __init__(self, d, D, seed=2026, generator=None):
         self.d, self.D, self.A = d, D, D / d
-        generator = torch.Generator(); generator.manual_seed(seed)
+        if generator is None:
+            generator = torch.Generator(); generator.manual_seed(seed)
+        elif not isinstance(generator, torch.Generator):
+            raise TypeError("generator must be a torch.Generator")
         self.indices = torch.randperm(D, generator=generator)[:d]
         self.column_signs = (torch.rand(D, generator=generator) < 0.5).float() * 2 - 1
         angles = 2 * math.pi * torch.rand(D // 2 + 1, generator=generator)
@@ -30,4 +33,3 @@ class FourierKashinFrame:
     def frame_synthesis(self, a):
         transformed = self._forward_transform(self.column_signs.to(a.device) * a)
         return math.sqrt(self.A) * transformed[self.indices.to(a.device)]
-

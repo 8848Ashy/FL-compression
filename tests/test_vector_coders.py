@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from compression.vector_coders import (
+from archive.compression.vector_coders import (
     METHODS,
     evaluate_single_vector_compression,
     prepare_single_vector_compression,

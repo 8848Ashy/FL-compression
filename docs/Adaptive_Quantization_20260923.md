@@ -1,5 +1,7 @@
 # 自适应量化对照（2026-09-23）
 
+> 历史记录：原入口现已归档至 `archive/experiments/`；新的联邦训练使用根目录 `run_experiment.py`。
+
 新入口：`python -u -m experiments.adaptive_accuracy --seeds 0 1 2 3 4 --rounds 50`。
 旧 matched_accuracy / lowbit 和量化函数保留，供历史复现；新实验默认并列运行
 Original、SRK/Kashin × 1/2 bit × minmax-stochastic/optimized-uniform/lloyd-max。

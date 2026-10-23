@@ -16,19 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import config
+from archive.root import config
 from data.mnist_federated import build_mnist_federated_data
 from models.mnist_mlp import MNIST_MLP
 from federated.local_training import local_train_delta
 from federated.evaluation import evaluate_model
 from federated.aggregation import federated_round_original_update
-from compression.srk import federated_round_srk_update
+from archive.compression.srk_legacy import federated_round_srk_update
 from compression.kashin_frame import FourierKashinFrame
-from compression.kashin_compressor import federated_round_kashin_update
+from archive.compression.kashin_compressor import federated_round_kashin_update
 from utils.communication import (quantized_payload_bits, normalized_bits_per_dim,
                                   total_communication_bits, total_communication_mb,
                                   srk_encoded_dimension, kashin_encoded_dimension)
-from experiments.lowbit import run_kashin_lowbit_experiment
+from archive.experiments.lowbit import run_kashin_lowbit_experiment
 
 
 def verify_communication_formulas(d=50890):

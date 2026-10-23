@@ -18,9 +18,9 @@ from utils.plot_style import configure_chinese_plotting
 
 configure_chinese_plotting()
 
-import config
+from archive.root import config
 from data.mnist_federated import build_mnist_federated_data
-from experiments.lowbit import run_kashin_lowbit_experiment
+from archive.experiments.lowbit import run_kashin_lowbit_experiment
 
 SEEDS = [0, 1, 2, 3, 4]
 FIXED_BUDGETS = [8, 16, 32, 64, 128, 256, 512]

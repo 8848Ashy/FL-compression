@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from experiments.matched_accuracy import load_data, minibatches, train_delta, evaluate, write_csv, METHODS
+from archive.experiments.matched_accuracy import load_data, minibatches, train_delta, evaluate, write_csv, METHODS
 from compression.srk import _fwht_fast
 from compression.kashin_frame import FourierKashinFrame
 from compression.kashin_solver import kashin_solve, kashin_solve_balanced

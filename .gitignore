@@ -13,6 +13,7 @@ data/MNIST/
 *.jpg
 *.jpeg
 outputs/
+results/*/
 *.npz
 *.npy
 *.csv

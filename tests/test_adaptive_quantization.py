@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 import torch
-from compression.adaptive_quantization import adaptive_quantize, decode_adaptive
+from archive.compression.adaptive_quantization import adaptive_quantize, decode_adaptive
 
 
 class AdaptiveTests(unittest.TestCase):
@@ -30,9 +30,9 @@ class AdaptiveTests(unittest.TestCase):
                     torch.testing.assert_close(q,x)
 
     def test_compression_output_really_controls_update(self):
-        from experiments.adaptive_accuracy import compress_updates
+        from archive.experiments.adaptive_accuracy import compress_updates
         from compression.kashin_frame import FourierKashinFrame
-        from compression.quantizer_payload import METHODS, CodebookRegistry
+        from archive.compression.quantizer_payload import METHODS, CodebookRegistry
         xs = torch.randn(3,8)
         frame = FourierKashinFrame(8,16)
         signs = torch.ones(16)
@@ -42,7 +42,7 @@ class AdaptiveTests(unittest.TestCase):
                                    'Kashin:1:fixed-uniform':[-1.,1.]})
         for method in ('SRK','Kashin'):
             for quantizer in METHODS:
-                with patch('experiments.adaptive_accuracy.decode',side_effect=zero_decode):
+                with patch('archive.experiments.adaptive_accuracy.decode',side_effect=zero_decode):
                     update,_,_ = compress_updates(xs,method,1,quantizer,frame,signs,0,1,registry)
                 torch.testing.assert_close(update,torch.zeros(8))
 

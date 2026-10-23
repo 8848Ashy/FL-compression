@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import config
+from archive.root import config
 from compression.kashin_frame import FourierKashinFrame
 from compression.kashin_solver import kashin_solve
 from data.mnist_federated import build_mnist_federated_data

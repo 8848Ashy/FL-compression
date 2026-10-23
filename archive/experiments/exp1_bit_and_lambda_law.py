@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from compression.vector_coders import (
+from archive.compression.vector_coders import (
     METHODS,
     evaluate_prepared_vector_compression,
     prepare_single_vector_compression,

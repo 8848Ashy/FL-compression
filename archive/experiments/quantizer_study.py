@@ -17,12 +17,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from compression.adaptive_quantization import adaptive_quantize
-from compression.quantizer_payload import METHODS, CodebookRegistry, canonical, encode, decode, rms32
+from archive.compression.adaptive_quantization import adaptive_quantize
+from archive.compression.quantizer_payload import METHODS, CodebookRegistry, canonical, encode, decode, rms32
 from compression.srk import _fwht_fast
 from compression.kashin_frame import FourierKashinFrame
 from compression.kashin_solver import kashin_solve_balanced
-from experiments.matched_accuracy import load_data,minibatches,train_delta,evaluate
+from archive.experiments.matched_accuracy import load_data,minibatches,train_delta,evaluate
 from models.mnist_mlp import MNIST_MLP
 from utils.state_dict import flatten_state_dict,unflatten_state_dict
 

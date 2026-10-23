@@ -1,5 +1,8 @@
 # 本轮复现命令与实现说明
 
+> 历史记录：下方命令针对重构前入口 `experiments.quantizer_study`。该脚本现已移至
+> `archive/experiments/`，当前统一训练入口是 `python run_experiment.py`；下方旧命令不再是当前工作流。
+
 在 D:\FL 中执行。解释器为 `D:\Miniconda\envs\fl-mnist\python.exe`，下方用 `$flPython`
 简写。各输出目录必须不存在；脚本拒绝覆盖。完整训练只提供命令，本轮没有启动。
 

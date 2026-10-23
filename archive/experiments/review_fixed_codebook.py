@@ -10,10 +10,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from experiments import quantizer_study as old
-from experiments.full_quantizer_training import SPECS, FINGERPRINT, key, tensor_sha, verify_binding
-from experiments.summarize_quantizer_training import PRIMARY, endpoint, compare, target, validate
-from compression.quantizer_payload import METHODS, CodebookRegistry
+from archive.experiments import quantizer_study as old
+from archive.experiments.full_quantizer_training import SPECS, FINGERPRINT, key, tensor_sha, verify_binding
+from archive.experiments.summarize_quantizer_training import PRIMARY, endpoint, compare, target, validate
+from archive.compression.quantizer_payload import METHODS, CodebookRegistry
 
 A, B, C, D, E, F = METHODS
 

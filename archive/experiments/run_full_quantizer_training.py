@@ -11,10 +11,10 @@ from pathlib import Path
 
 import torch
 
-from experiments import quantizer_study as old
-from experiments.full_quantizer_training import FINGERPRINT, SPECS, key, verify_binding
-from experiments.summarize_quantizer_training import PRIMARY, validate
-from compression.quantizer_payload import CodebookRegistry
+from archive.experiments import quantizer_study as old
+from archive.experiments.full_quantizer_training import FINGERPRINT, SPECS, key, verify_binding
+from archive.experiments.summarize_quantizer_training import PRIMARY, validate
+from archive.compression.quantizer_payload import CodebookRegistry
 
 
 def run(root, name, arguments):

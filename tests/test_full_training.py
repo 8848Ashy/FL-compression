@@ -3,10 +3,10 @@ import numpy as np
 import pytest
 import torch
 
-from experiments.full_quantizer_training import SPECS, key, wire_bits, instrumented_aggregate
-from experiments.summarize_quantizer_training import paired_summary, target, endpoint, validate, compare
-from experiments import quantizer_study as old
-from compression.quantizer_payload import CodebookRegistry
+from archive.experiments.full_quantizer_training import SPECS, key, wire_bits, instrumented_aggregate
+from archive.experiments.summarize_quantizer_training import paired_summary, target, endpoint, validate, compare
+from archive.experiments import quantizer_study as old
+from archive.compression.quantizer_payload import CodebookRegistry
 
 
 def rows(rounds=50):

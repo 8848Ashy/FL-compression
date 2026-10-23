@@ -1,3 +1,4 @@
+import math
 import torch
 
 
@@ -53,3 +54,54 @@ def quantize_with_codebook(values, centers):
 def lloyd_max_quantize(values, k_levels, iterations=20):
     centers = lloyd_max_codebook(values, k_levels, iterations)
     return quantize_with_codebook(values, centers), centers
+
+
+def quantize_doscale(x, bits=1, scale_type="l1_mean", stochastic=True, generator=None):
+    """Quantize with a per-vector dynamic scale (the scale is side metadata)."""
+    if x.ndim == 0 or not x.numel() or not x.is_floating_point() or not torch.isfinite(x).all():
+        raise ValueError("x must be a nonempty finite floating tensor")
+    if bits < 1:
+        raise ValueError("bits must be >= 1")
+    if scale_type == "l1_mean":
+        scale = x.abs().mean()
+    elif scale_type == "l2_norm":
+        scale = x.norm() / math.sqrt(x.numel())
+    elif scale_type == "max":
+        scale = x.abs().max()
+    else:
+        raise ValueError("scale_type must be l1_mean, l2_norm, or max")
+    if scale.item() == 0:
+        return torch.zeros_like(x)
+    scale = scale.clamp_min(torch.finfo(x.dtype).tiny)
+    if bits == 1:
+        return scale * torch.where(x >= 0, 1.0, -1.0)
+    # The selected statistic is the dynamic clipping radius for multibit coding.
+    return _quantize_symmetric(x.clamp(-scale, scale), scale, bits, stochastic, generator)
+
+
+def quantize_static_noscale(x, bits=1, clip_val=0.05, stochastic=True, generator=None):
+    """Quantize with a fixed public range and no transmitted scale metadata."""
+    if x.ndim == 0 or not x.numel() or not x.is_floating_point() or not torch.isfinite(x).all():
+        raise ValueError("x must be a nonempty finite floating tensor")
+    if bits < 1 or not math.isfinite(float(clip_val)) or clip_val <= 0:
+        raise ValueError("bits must be >= 1 and clip_val must be positive")
+    bound = torch.as_tensor(clip_val, dtype=x.dtype, device=x.device)
+    clipped = x.clamp(-bound, bound)
+    if bits == 1:
+        return torch.where(clipped >= 0, bound, -bound)
+    return _quantize_symmetric(clipped, bound, bits, stochastic, generator)
+
+
+def _quantize_symmetric(x, bound, bits, stochastic, generator):
+    levels = 2 ** bits
+    # Use equally spaced levels including both endpoints.
+    step = 2 * bound / (levels - 1)
+    position = ((x + bound) / step).clamp(0, levels - 1)
+    if stochastic:
+        lower = position.floor()
+        probability = position - lower
+        draw = torch.rand(position.shape, device=x.device, dtype=x.dtype, generator=generator)
+        indices = lower + (draw < probability).to(x.dtype)
+    else:
+        indices = position.round()
+    return -bound + indices * step

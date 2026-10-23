@@ -9,9 +9,9 @@ from models.mnist_mlp import MNIST_MLP
 from federated.local_training import local_train_delta
 from federated.evaluation import evaluate_model
 from federated.aggregation import federated_round_original_update
-from compression.srk import federated_round_srk_update
+from archive.compression.srk_legacy import federated_round_srk_update
 from compression.kashin_frame import FourierKashinFrame
-from compression.kashin_compressor import federated_round_kashin_update
+from archive.compression.kashin_compressor import federated_round_kashin_update
 from utils.plot_style import configure_chinese_plotting
 
 configure_chinese_plotting()

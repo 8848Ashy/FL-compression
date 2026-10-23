@@ -17,8 +17,9 @@ from utils.communication import *
 from compression.quantization import stochastic_k_level_quantize, uniform_quantize
 from compression.kashin_frame import FourierKashinFrame
 from compression.kashin_solver import kashin_solve
-from compression.srk import _fwht_fast, federated_round_srk_update
-from compression.kashin_compressor import federated_round_kashin_update
+from compression.srk import _fwht_fast
+from archive.compression.srk_legacy import federated_round_srk_update
+from archive.compression.kashin_compressor import federated_round_kashin_update
 from federated.local_training import local_train, local_train_delta
 from federated.aggregation import federated_round_original_update
 
