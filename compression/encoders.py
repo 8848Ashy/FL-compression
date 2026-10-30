@@ -30,6 +30,7 @@ class VectorEncoder:
     kashin_iters: int = 5
     kashin_eta: float = 0.9
     stochastic: bool = True
+    clip_quantile: float = 0.0
 
     def __post_init__(self):
         if self.transform not in ENCODERS:
@@ -44,6 +45,8 @@ class VectorEncoder:
             raise ValueError("lam must be finite and >= 1")
         if self.kashin_iters < 1 or not 0 < self.kashin_eta < 1:
             raise ValueError("kashin_iters must be positive and kashin_eta in (0, 1)")
+        if not 0.0 <= self.clip_quantile < 1.0:
+            raise ValueError("clip_quantile must be in [0, 1)")
 
     def encode_decode(self, flat_delta: torch.Tensor, seed: int) -> tuple[torch.Tensor, dict]:
         if flat_delta.ndim != 1 or not flat_delta.numel() or not flat_delta.is_floating_point():
@@ -88,6 +91,7 @@ class VectorEncoder:
                 quantization = quantize_doscale(
                     coefficients, bits=self.bits, scale_type=self.scale_type,
                     stochastic=self.stochastic, generator=qgen,
+                    clip_quantile=self.clip_quantile,
                 )
                 quantized = quantization["values"]
                 bpd = self.bits * (D / d) + 32.0 / d
