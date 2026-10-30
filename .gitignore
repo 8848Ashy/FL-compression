@@ -30,3 +30,8 @@ results/*/
 # OS files
 Thumbs.db
 .DS_Store
+
+# EMNIST dataset and Word lock files
+data/EMNIST/
+$~$*.docx
+~$*.pptx

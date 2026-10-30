@@ -36,6 +36,8 @@ def parse_args(argv=None):
     parser.add_argument("--transform", choices=ENCODERS, default="uncompressed")
     parser.add_argument("--scale_mode", choices=("doscale", "noscale"), default="doscale")
     parser.add_argument("--scale_type", choices=("l1_mean", "l2_norm", "max"), default="l1_mean")
+    parser.add_argument("--stochastic", type=int, choices=(0, 1), default=1,
+                        help="1=stochastic rounding (hadamard/kashin family), 0=deterministic (signSGD family)")
     parser.add_argument("--bits", type=int, choices=(1, 2, 3, 4, 8), default=1)
     parser.add_argument("--lam", type=float, default=1.3)
     parser.add_argument("--clip_val", type=float, default=0.25,
@@ -82,6 +84,7 @@ def main(argv=None):
         lam=args.lam, clip_val=args.clip_val, noscale_bound_mode=args.noscale_bound_mode,
         scale_type=args.scale_type,
         kashin_iters=args.kashin_iters, kashin_eta=args.kashin_eta,
+        stochastic=bool(args.stochastic),
     )
     exp_name = args.exp_name or (
         f"{args.transform}_{args.scale_mode}_b{args.bits}_lam{args.lam:.2f}_s{args.seed}"
