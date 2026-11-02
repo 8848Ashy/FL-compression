@@ -53,7 +53,7 @@ nohup python experiments/run_parallel.py \
 - 每个实验子进程限 2 线程（OMP_NUM_THREADS=2），16 并发 ≈ 32 核，不干扰其他用户；
 - 进度：`tail -f results_stage4_mid_3seeds.out`，单组日志在 `results/stage4_mid_3seeds/logs/`；
 - 预计 33 组（10 配置 × 3 seeds + hadamard×3）约 30~50 分钟（本机串行需 8 小时）；
-- **必须 `--device cpu`**：否则 auto 会抢 2 张 RTX 6000D，且 GPU 结果与本地 seed-42 数据不可比。
+- **必须 `--device cpu`**：理由不是"GPU 结果无效"，而是（1）CPU/GPU 浮点不逐位一致，单 seed 轨迹可漂移 ±0.3~0.5pp——与当前 ~1pp 量级的 λ 效应同阶，会污染与本地 seed-42 数据的对齐；（2）多样本统计层面 CPU/GPU 等价，等实验全部多种子化后可自由使用 GPU；（3）多进程抢 2 张卡引入调度抖动，cuDNN 默认非确定算法还会使同 seed 重跑不一致。
 
 ## 6. 结果取回
 
