@@ -1,0 +1,21 @@
+{
+  "batch": "raw_beats_uncompressed_diag",
+  "output_dir": "results/diag_raw_vs_uncompressed",
+  "common": ["--task", "emnist_cnn", "--partition", "dirichlet", "--dirichlet_alpha", "0.2",
+             "--num_clients", "100", "--clients_per_round", "5",
+             "--total_rounds", "80", "--local_epochs", "3", "--server_lr", "1.25",
+             "--scale_mode", "doscale"],
+  "jobs": [
+    {"name": "uncompressed_s43", "args": ["--transform", "uncompressed", "--bits", "8", "--seed", "43", "--exp_name", "uncompressed_s43"], "threads": 2},
+    {"name": "uncompressed_s44", "args": ["--transform", "uncompressed", "--bits", "8", "--seed", "44", "--exp_name", "uncompressed_s44"], "threads": 2},
+    {"name": "raw_b3_s43", "args": ["--transform", "raw", "--bits", "3", "--stochastic", "0", "--seed", "43", "--exp_name", "raw_b3_s43"], "threads": 2},
+    {"name": "raw_b3_s44", "args": ["--transform", "raw", "--bits", "3", "--stochastic", "0", "--seed", "44", "--exp_name", "raw_b3_s44"], "threads": 2},
+    {"name": "raw_b4_s43", "args": ["--transform", "raw", "--bits", "4", "--stochastic", "0", "--seed", "43", "--exp_name", "raw_b4_s43"], "threads": 2},
+    {"name": "raw_b4_s44", "args": ["--transform", "raw", "--bits", "4", "--stochastic", "0", "--seed", "44", "--exp_name", "raw_b4_s44"], "threads": 2},
+    {"name": "raw_b5_s43", "args": ["--transform", "raw", "--bits", "5", "--stochastic", "0", "--seed", "43", "--exp_name", "raw_b5_s43"], "threads": 2},
+    {"name": "raw_b5_s44", "args": ["--transform", "raw", "--bits", "5", "--stochastic", "0", "--seed", "44", "--exp_name", "raw_b5_s44"], "threads": 2},
+    {"name": "raw_b3_stoch_s42", "args": ["--transform", "raw", "--bits", "3", "--stochastic", "1", "--seed", "42", "--exp_name", "raw_b3_stoch_s42"], "threads": 2},
+    {"name": "raw_b4_stoch_s42", "args": ["--transform", "raw", "--bits", "4", "--stochastic", "1", "--seed", "42", "--exp_name", "raw_b4_stoch_s42"], "threads": 2},
+    {"name": "raw_b5_stoch_s42", "args": ["--transform", "raw", "--bits", "5", "--stochastic", "1", "--seed", "42", "--exp_name", "raw_b5_stoch_s42"], "threads": 2}
+  ]
+}
