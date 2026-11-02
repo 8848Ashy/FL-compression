@@ -98,14 +98,20 @@ def quantize_doscale(x, bits=1, scale_type="l1_mean", stochastic=True, generator
 
     统一口径（老师要求：同一方法内部，1/2/3-bit 是同一个算法、只改比特数）：
     对任意 bits，动态范围取 max|x|（每轮现算，随向量传一个 32bit 浮点），
+    或 clip_quantile>0 时取 |x| 的 q 分位数并截断；
     再用 _quantize_symmetric 在 [-bound, bound] 上均匀网格量化。
       - stochastic=True  : 随机舍入（无偏），用于 hadamard / kashin 一脉
-      - stochastic=False : 确定性最近格舍入（signSGD 一脉，多 bit 为其自然扩展）
-      - bits==1 时网格退化为 {±bound}：stochastic=False 即 signSGD（sign×尺度，
-        尺度对应原文步长 delta）；stochastic=True 即为无偏符号量化。
-      - clip_quantile=q in (0,1): 边界改取 |x| 的 q 分位数并截断（温和截断，
-        出处 TernGrad 2.5sigma / ACIQ 最优截断；治重尾梯度下 max 被离群值绑架）。
-    `scale_type` 仅为接口兼容保留，本路径不再使用（旧 mean 版已移除）。
+      - stochastic=False : 确定性最近格舍入（raw/signSGD 一脉）
+
+    stochastic=False 时额外做最小二乘最优投影定标：
+        alpha* = <x, decoded_grid> / ||decoded_grid||^2,  decoded *= alpha*
+    其中内积用未截断的原向量 x；实际传输的合并标量为 effective_scale = bound*alpha*
+    （仍是一个 32bit 浮点，bpd 不变）。效果：
+      1. 1/2/3-bit 有效步长自动与原梯度对齐，server_lr 统一保持 1.0，无需外部 DELTA 表；
+      2. NMSE = 1 - cos^2(x, decoded) < 1 且随 bit 严格单调下降；
+      3. bits=1 时符号不随 clip 改变，alpha**bound 恒等于 ||x||_1/d，
+         故 b=1 的 det_max 与 det_clip995 结果完全一致。
+    `scale_type` 仅为接口兼容保留，本路径不再使用。
     """
     if x.ndim == 0 or not x.numel() or not x.is_floating_point() or not torch.isfinite(x).all():
         raise ValueError("x must be a nonempty finite floating tensor")
@@ -115,13 +121,26 @@ def quantize_doscale(x, bits=1, scale_type="l1_mean", stochastic=True, generator
         raise ValueError("clip_quantile must be in [0, 1)")
     if x.abs().max().item() == 0:
         return {"values": torch.zeros_like(x), "bpc": float(bits), "scale": 0.0}
+
     if clip_quantile > 0:
         bound = x.abs().quantile(clip_quantile).clamp_min(torch.finfo(x.dtype).tiny)
-        x = x.clamp(-bound, bound)
+        x_in = x.clamp(-bound, bound)
     else:
         bound = x.abs().max().clamp_min(torch.finfo(x.dtype).tiny)
-    decoded = _quantize_symmetric(x, bound, bits, stochastic, generator)
-    return {"values": decoded, "bpc": float(bits), "scale": float(bound.item())}
+        x_in = x
+
+    decoded = _quantize_symmetric(x_in, bound, bits, stochastic, generator)
+
+    if not stochastic:
+        # 确定性均匀网格量化（raw 家族）：最小二乘最优尺度 alpha* = <x, decoded> / ||decoded||^2
+        denom = decoded.square().sum().clamp_min(torch.finfo(x.dtype).tiny)
+        alpha = (x * decoded).sum() / denom
+        decoded = decoded * alpha
+        effective_scale = float((bound * alpha).item())
+    else:
+        effective_scale = float(bound.item())
+
+    return {"values": decoded, "bpc": float(bits), "scale": effective_scale}
 
 
 def quantize_static_noscale(x, bits=1, clip_val=0.05, stochastic=True, generator=None):

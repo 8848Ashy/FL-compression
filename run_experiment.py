@@ -97,7 +97,7 @@ def main(argv=None):
     (out / "hparams.json").write_text(json.dumps(vars(args) | {"device": str(device),
         "exp_name": exp_name}, indent=2, default=str), encoding="utf-8")
     columns = ("round", "train_loss", "test_loss", "test_acc", "mean_nmse", "mean_mse",
-               "bpd", "actual_lam", "cumulative_bpd", "elapsed_sec")
+               "bpd", "actual_lam", "cumulative_bpd", "elapsed_sec", "client_update_norm")
     cumulative_bpd = 0.0
     started = time.perf_counter()
     with (out / "metrics.csv").open("w", newline="", encoding="utf-8") as stream:
@@ -119,6 +119,7 @@ def main(argv=None):
                 "bpd": stats["bpd"], "actual_lam": stats["actual_lam"],
                 "cumulative_bpd": cumulative_bpd,
                 "elapsed_sec": time.perf_counter() - started,
+                "client_update_norm": stats["client_update_norm"],
             })
             stream.flush()
             print(f"round={round_idx + 1}/{args.total_rounds} acc={test_metrics['test_acc']:.4f} "
