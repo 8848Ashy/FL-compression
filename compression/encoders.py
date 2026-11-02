@@ -39,7 +39,7 @@ class VectorEncoder:
             raise ValueError("scale_mode must be doscale or noscale")
         if self.noscale_bound_mode not in ("dimension_scaled", "raw_fixed"):
             raise ValueError("noscale_bound_mode must be dimension_scaled or raw_fixed")
-        if self.bits not in (1, 2, 3, 4, 8):
+        if not 1 <= self.bits <= 8:
             raise ValueError("bits must be one of 1, 2, 3, 4, 8")
         if self.lam < 1 or not math.isfinite(self.lam):
             raise ValueError("lam must be finite and >= 1")
