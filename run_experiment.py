@@ -40,7 +40,7 @@ def parse_args(argv=None):
                         help="1=stochastic rounding (hadamard/kashin family), 0=deterministic (signSGD family)")
     parser.add_argument("--clip_quantile", type=float, default=0.0,
                         help="if in (0,1), doscale bound = quantile(|x|) with clipping")
-    parser.add_argument("--bits", type=int, choices=(1, 2, 3, 4, 8), default=1)
+    parser.add_argument("--bits", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8), default=1)
     parser.add_argument("--lam", type=float, default=1.3)
     parser.add_argument("--clip_val", type=float, default=0.25,
                         help="reference L2 norm for noscale dimension_scaled bounds")
