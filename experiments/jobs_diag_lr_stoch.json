@@ -1,0 +1,12 @@
+{
+  "batch": "lr_fairness_stoch",
+  "output_dir": "results/diag_raw_vs_uncompressed",
+  "common": ["--task", "emnist_cnn", "--partition", "dirichlet", "--dirichlet_alpha", "0.2",
+             "--num_clients", "100", "--clients_per_round", "5",
+             "--total_rounds", "80", "--local_epochs", "3",
+             "--scale_mode", "doscale", "--seed", "42", "--server_lr", "1.0"],
+  "jobs": [
+    {"name": "kb_b4_lam1.0_lr1.0_s42", "args": ["--transform", "fourier_kashin_balanced", "--bits", "4", "--stochastic", "1", "--lam", "1.0", "--kashin_iters", "15", "--kashin_eta", "0.9", "--exp_name", "kb_b4_lam1.0_lr1.0_s42"], "threads": 2},
+    {"name": "had_b4_lr1.0_s42",        "args": ["--transform", "hadamard", "--bits", "4", "--stochastic", "1", "--lam", "1.21059", "--exp_name", "had_b4_lr1.0_s42"], "threads": 2}
+  ]
+}
