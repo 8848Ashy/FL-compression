@@ -48,6 +48,8 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    ap.add_argument("--skip-existing", action="store_true",
+                    help="skip jobs whose <output_dir>/<exp_name>/metrics.csv already has >=80 rounds")
     args = ap.parse_args()
 
     spec = json.loads(args.jobs.read_text(encoding="utf-8"))
@@ -58,6 +60,31 @@ def main():
     log_dir = out_dir / "logs"
     log_dir.mkdir(exist_ok=True)
     common = list(spec["common"]) + ["--output_dir", str(out_dir)]
+
+    def name_of(job):
+        args_ = list(common) + list(job["args"])
+        return args_[args_.index("--exp_name") + 1]
+
+    def is_done(job):
+        mc = out_dir / name_of(job) / "metrics.csv"
+        if not mc.exists():
+            return False
+        try:
+            with open(str(mc), encoding="utf-8") as f:
+                return sum(1 for _ in csv.DictReader(f)) >= 80
+        except Exception:
+            return False
+
+    import csv
+    if args.skip_existing:
+        todo = [j for j in spec["jobs"] if not is_done(j)]
+        skipped = len(spec["jobs"]) - len(todo)
+        if skipped:
+            print("[%s] skip-existing: %d done, %d to run" % (spec["batch"], skipped, len(todo)), flush=True)
+        spec["jobs"] = todo
+        if not spec["jobs"]:
+            print("[%s] all jobs already done" % spec["batch"], flush=True)
+            return
 
     print("[%s] %d jobs, %d workers, device=%s" % (spec["batch"], len(spec["jobs"]), args.workers, args.device), flush=True)
     results = []

@@ -21,11 +21,15 @@ for d in sorted(os.listdir(args.root)):
     with io.open(str(hp), encoding="utf-8-sig") as f:
         h = json.load(f)
     tail = m[-10:]
+    method = h.get("transform")
+    bits, lam = int(h.get("bits")), float(h.get("lam", 1.0))
+    if method == "uncompressed":
+        bits, lam = 32, 1.0   # 元数据修正：未压缩按 FP32 记账
     rows.append({
         "run": d,
-        "method": h.get("transform"),
-        "bits": h.get("bits"),
-        "lam": h.get("lam"),
+        "method": method,
+        "bits": bits,
+        "lam": lam,
         "stochastic": h.get("stochastic"),
         "seed": h.get("seed"),
         "actual_bpd": round(sum(float(r["bpd"]) for r in tail) / len(tail), 4),
