@@ -1,0 +1,196 @@
+{
+ "batch": "mid_b6_gapfill",
+ "output_dir": "results/stage4_mid_full_lr10",
+ "common": [
+  "--task",
+  "emnist_cnn",
+  "--partition",
+  "dirichlet",
+  "--dirichlet_alpha",
+  "0.2",
+  "--num_clients",
+  "100",
+  "--clients_per_round",
+  "5",
+  "--total_rounds",
+  "80",
+  "--local_epochs",
+  "3",
+  "--server_lr",
+  "1.0",
+  "--scale_mode",
+  "doscale",
+  "--stochastic",
+  "1"
+ ],
+ "jobs": [
+  {
+   "name": "mid_had_b6_s42",
+   "args": [
+    "--transform",
+    "hadamard",
+    "--bits",
+    "6",
+    "--lam",
+    "1.21059",
+    "--seed",
+    "42",
+    "--exp_name",
+    "mid_had_b6_s42"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_kb_b6_lam1.0_s42",
+   "args": [
+    "--transform",
+    "fourier_kashin_balanced",
+    "--bits",
+    "6",
+    "--lam",
+    "1.0",
+    "--kashin_iters",
+    "15",
+    "--kashin_eta",
+    "0.9",
+    "--seed",
+    "42",
+    "--exp_name",
+    "mid_kb_b6_lam1.0_s42"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_kb_b6_lam1.21059_s42",
+   "args": [
+    "--transform",
+    "fourier_kashin_balanced",
+    "--bits",
+    "6",
+    "--lam",
+    "1.21059",
+    "--kashin_iters",
+    "15",
+    "--kashin_eta",
+    "0.9",
+    "--seed",
+    "42",
+    "--exp_name",
+    "mid_kb_b6_lam1.21059_s42"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_had_b6_s43",
+   "args": [
+    "--transform",
+    "hadamard",
+    "--bits",
+    "6",
+    "--lam",
+    "1.21059",
+    "--seed",
+    "43",
+    "--exp_name",
+    "mid_had_b6_s43"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_kb_b6_lam1.0_s43",
+   "args": [
+    "--transform",
+    "fourier_kashin_balanced",
+    "--bits",
+    "6",
+    "--lam",
+    "1.0",
+    "--kashin_iters",
+    "15",
+    "--kashin_eta",
+    "0.9",
+    "--seed",
+    "43",
+    "--exp_name",
+    "mid_kb_b6_lam1.0_s43"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_kb_b6_lam1.21059_s43",
+   "args": [
+    "--transform",
+    "fourier_kashin_balanced",
+    "--bits",
+    "6",
+    "--lam",
+    "1.21059",
+    "--kashin_iters",
+    "15",
+    "--kashin_eta",
+    "0.9",
+    "--seed",
+    "43",
+    "--exp_name",
+    "mid_kb_b6_lam1.21059_s43"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_had_b6_s44",
+   "args": [
+    "--transform",
+    "hadamard",
+    "--bits",
+    "6",
+    "--lam",
+    "1.21059",
+    "--seed",
+    "44",
+    "--exp_name",
+    "mid_had_b6_s44"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_kb_b6_lam1.0_s44",
+   "args": [
+    "--transform",
+    "fourier_kashin_balanced",
+    "--bits",
+    "6",
+    "--lam",
+    "1.0",
+    "--kashin_iters",
+    "15",
+    "--kashin_eta",
+    "0.9",
+    "--seed",
+    "44",
+    "--exp_name",
+    "mid_kb_b6_lam1.0_s44"
+   ],
+   "threads": 2
+  },
+  {
+   "name": "mid_kb_b6_lam1.21059_s44",
+   "args": [
+    "--transform",
+    "fourier_kashin_balanced",
+    "--bits",
+    "6",
+    "--lam",
+    "1.21059",
+    "--kashin_iters",
+    "15",
+    "--kashin_eta",
+    "0.9",
+    "--seed",
+    "44",
+    "--exp_name",
+    "mid_kb_b6_lam1.21059_s44"
+   ],
+   "threads": 2
+  }
+ ]
+}

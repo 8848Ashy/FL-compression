@@ -33,5 +33,6 @@ Thumbs.db
 
 # EMNIST dataset and Word lock files
 data/EMNIST/
+data/CIFAR10/
 $~$*.docx
 ~$*.pptx

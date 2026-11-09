@@ -27,11 +27,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 
-def run_job(py, root, common, job, out_dir, device, log_dir):
+def run_job(py, root, common, job, out_dir, device, log_dir, gpus=0, slot=0):
     name = job["name"]
     args = list(common) + list(job["args"])
     if "--device" not in args:
-        args += ["--device", device]
+        if gpus > 0:
+            args += ["--device", "cuda:%d" % (slot % gpus)]
+        else:
+            args += ["--device", device]
     threads = str(job.get("threads", 2))
     env = dict(os.environ, OMP_NUM_THREADS=threads, MKL_NUM_THREADS=threads)
     log_path = Path(log_dir) / (name + ".log")
@@ -47,10 +50,15 @@ def main():
     ap.add_argument("--jobs", required=True, type=Path)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--gpus", type=int, default=0,
+                    help="if >0 and device=auto, round-robin assign cuda:0..N-1 to workers")
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     ap.add_argument("--skip-existing", action="store_true",
                     help="skip jobs whose <output_dir>/<exp_name>/metrics.csv already has >=80 rounds")
     args = ap.parse_args()
+    import torch as _torch
+    if args.gpus > 0 and args.device == "auto" and _torch.cuda.is_available():
+        print("GPU mode: workers round-robin on cuda:0..cuda:%d" % (args.gpus - 1))
 
     spec = json.loads(args.jobs.read_text(encoding="utf-8"))
     root = args.root
@@ -90,8 +98,8 @@ def main():
     results = []
     t_all = time.time()
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
-        futs = {ex.submit(run_job, py, root, common, j, out_dir, args.device, log_dir): j
-                for j in spec["jobs"]}
+        futs = {ex.submit(run_job, py, root, common, j, out_dir, args.device, log_dir, args.gpus, idx): j
+                for idx, j in enumerate(spec["jobs"])}
         for fut in as_completed(futs):
             name, rc, el = fut.result()
             results.append((name, rc, el))

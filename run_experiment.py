@@ -16,20 +16,23 @@ from data.mnist_federated import build_mnist_federated_data
 from federated.aggregation import run_federated_round
 from federated.evaluation import evaluate_model_metrics
 from models.mnist_mlp import MNIST_CNN, MNIST_MLP
+from models.cifar_resnet import CIFARResNet9
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", choices=("mnist_mlp", "mnist_cnn", "emnist_cnn"), default="mnist_mlp")
+    parser.add_argument("--task", choices=("mnist_mlp", "mnist_cnn", "emnist_cnn", "cifar_resnet9"), default="mnist_mlp")
     parser.add_argument("--partition", choices=("iid", "dirichlet"), default="iid")
     parser.add_argument("--dirichlet_alpha", type=float, default=0.5)
     parser.add_argument("--num_clients", type=int, default=100)
     parser.add_argument("--clients_per_round", type=int, default=10)
-    parser.add_argument("--images_per_client", type=int, default=600)
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--images_per_client", type=int, default=None)  # per-task default below
+    parser.add_argument("--batch_size", type=int, default=None)  # per-task default below
     parser.add_argument("--total_rounds", type=int, default=100)
     parser.add_argument("--local_epochs", type=int, default=1)
     parser.add_argument("--client_lr", type=float, default=0.05)
+    parser.add_argument("--client_momentum", type=float, default=0.0)
+    parser.add_argument("--weight_decay", type=float, default=0.0)
     parser.add_argument("--server_lr", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto")
@@ -66,7 +69,16 @@ def main(argv=None):
         torch.cuda.manual_seed_all(args.seed)
     device = torch.device("cuda" if args.device == "auto" and torch.cuda.is_available()
                           else "cpu" if args.device == "auto" else args.device)
-    dataset = "emnist" if args.task == "emnist_cnn" else "mnist"
+    if args.task == "emnist_cnn":
+        dataset = "emnist"
+    elif args.task == "cifar_resnet9":
+        dataset = "cifar10"
+        if args.batch_size is None: args.batch_size = 64   # D2 final
+        if args.images_per_client is None: args.images_per_client = 500  # R1: 100x500=50k
+    else:
+        dataset = "mnist"
+    if args.batch_size is None: args.batch_size = 32
+    if args.images_per_client is None: args.images_per_client = 600
     clients, test_loader = build_mnist_federated_data(
         root="./data", num_clients=args.num_clients,
         images_per_client=args.images_per_client, batch_size_train=args.batch_size,
@@ -78,6 +90,8 @@ def main(argv=None):
         model = MNIST_MLP()
     elif args.task == "mnist_cnn":
         model = MNIST_CNN(num_classes=10)
+    elif args.task == "cifar_resnet9":
+        model = CIFARResNet9(num_classes=10)
     else:
         model = MNIST_CNN(num_classes=47 if args.emnist_split == "balanced" else 62)
     model.to(device)
@@ -108,6 +122,7 @@ def main(argv=None):
                 model, clients, encoder, clients_per_round=args.clients_per_round,
                 round_idx=round_idx, base_seed=args.seed,
                 frame_seed_mode=args.frame_seed_mode, local_epochs=args.local_epochs,
+            client_momentum=args.client_momentum, weight_decay=args.weight_decay,
                 client_lr=args.client_lr, server_lr=args.server_lr,
             )
             cumulative_bpd += stats["bpd"]

@@ -17,19 +17,27 @@ def build_mnist_federated_data(root="./data", num_clients=10, images_per_client=
         raise ValueError("partition must be iid or dirichlet")
     if dirichlet_alpha <= 0:
         raise ValueError("dirichlet_alpha must be positive")
-    transform = transforms.Compose([
-        transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,)),
-    ])
-    if dataset.lower() == "mnist":
-        train_dataset = datasets.MNIST(root=root, train=True, download=True, transform=transform)
-        test_dataset = datasets.MNIST(root=root, train=False, download=True, transform=transform)
-    elif dataset.lower() == "emnist":
-        train_dataset = datasets.EMNIST(root=root, split=emnist_split, train=True,
-                                        download=True, transform=transform)
-        test_dataset = datasets.EMNIST(root=root, split=emnist_split, train=False,
-                                       download=True, transform=transform)
+    if dataset.lower() == "cifar10":
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
+        ])  # D1: no augmentation (ToTensor+Normalize only), same protocol as EMNIST
+        train_dataset = datasets.CIFAR10(root=root, train=True, download=True, transform=transform)
+        test_dataset = datasets.CIFAR10(root=root, train=False, download=True, transform=transform)
     else:
-        raise ValueError("dataset must be mnist or emnist")
+        transform = transforms.Compose([
+            transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,)),
+        ])
+        if dataset.lower() == "mnist":
+            train_dataset = datasets.MNIST(root=root, train=True, download=True, transform=transform)
+            test_dataset = datasets.MNIST(root=root, train=False, download=True, transform=transform)
+        elif dataset.lower() == "emnist":
+            train_dataset = datasets.EMNIST(root=root, split=emnist_split, train=True,
+                                            download=True, transform=transform)
+            test_dataset = datasets.EMNIST(root=root, split=emnist_split, train=False,
+                                           download=True, transform=transform)
+        else:
+            raise ValueError("dataset must be mnist, emnist or cifar10")
 
     rng = np.random.default_rng(seed)
     needed = min(len(train_dataset), num_clients * images_per_client)

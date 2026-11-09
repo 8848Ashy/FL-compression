@@ -4,9 +4,9 @@ import torch.nn as nn
 from utils.state_dict import state_dict_subtract
 
 
-def local_train(global_model, dataloader, epochs=2, lr=0.05):
+def local_train(global_model, dataloader, epochs=2, lr=0.05, momentum=0.0, weight_decay=0.0):
     device = next(global_model.parameters()).device
-    local_model = copy.deepcopy(global_model); optimizer = optim.SGD(local_model.parameters(), lr=lr); criterion = nn.CrossEntropyLoss()
+    local_model = copy.deepcopy(global_model); optimizer = optim.SGD(local_model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay); criterion = nn.CrossEntropyLoss()
     local_model.train()
     for _ in range(epochs):
         for images, labels in dataloader:
@@ -15,16 +15,16 @@ def local_train(global_model, dataloader, epochs=2, lr=0.05):
     return local_model.state_dict()
 
 
-def local_train_delta(global_model, dataloader, epochs=2, lr=0.05):
-    global_state = copy.deepcopy(global_model.state_dict()); local_state = local_train(global_model, dataloader, epochs, lr)
+def local_train_delta(global_model, dataloader, epochs=2, lr=0.05, momentum=0.0, weight_decay=0.0):
+    global_state = copy.deepcopy(global_model.state_dict()); local_state = local_train(global_model, dataloader, epochs, lr, momentum, weight_decay)
     return state_dict_subtract(local_state, global_state)
 
 
-def local_train_delta_with_metrics(global_model, dataloader, epochs=1, lr=0.05):
+def local_train_delta_with_metrics(global_model, dataloader, epochs=1, lr=0.05, momentum=0.0, weight_decay=0.0):
     """Return the local model delta and the mean minibatch training loss."""
     device = next(global_model.parameters()).device
     local_model = copy.deepcopy(global_model)
-    optimizer = optim.SGD(local_model.parameters(), lr=lr)
+    optimizer = optim.SGD(local_model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
     criterion = nn.CrossEntropyLoss()
     losses = []
     local_model.train()

@@ -25,7 +25,8 @@ def federated_round_original(global_model, client_weights_list):
 def run_federated_round(global_model, client_loaders, encoder, *, total_clients=None,
                         clients_per_round=10, round_idx=0, base_seed=42,
                         frame_seed_mode="independent", local_epochs=1,
-                        client_lr=0.05, server_lr=1.0):
+                        client_lr=0.05, server_lr=1.0,
+                        client_momentum=0.0, weight_decay=0.0):
     """Train selected clients, encode each delta, average decoded updates, apply once."""
     total_clients = len(client_loaders) if total_clients is None else total_clients
     if total_clients != len(client_loaders):
@@ -46,7 +47,7 @@ def run_federated_round(global_model, client_loaders, encoder, *, total_clients=
         frame_seed = client_seed if frame_seed_mode == "independent" else int(base_seed) + int(round_idx) * 10007
         torch.manual_seed(client_seed)
         delta_state, train_loss = local_train_delta_with_metrics(
-            global_model, client_loaders[cid], epochs=local_epochs, lr=client_lr
+            global_model, client_loaders[cid], epochs=local_epochs, lr=client_lr, momentum=client_momentum, weight_decay=weight_decay
         )
         flat_delta, shapes = flatten_state_dict(delta_state)
         decoded, info = encoder.encode_decode(flat_delta, seed=frame_seed)
